@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <!--
+        Made you look..
+
+        https://github.com/questdb/play
+    -->
     <title>play.questdb.io</title>
     <style type="text/css">
         body {
@@ -10,6 +15,7 @@
             border: 0;
             padding: 0;
             font-size: 1.6em;
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,Cantarell,Helvetica,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Android Emoji",EmojiSymbols,"EmojiOne Mozilla","Twemoji Mozilla","Segoe UI Symbol","Noto Color Emoji";
         }
 
         section {
@@ -20,13 +26,58 @@
             padding: 4em;
             transform: translate(-50%, -50%)
         }
+
+        #run-me {
+            cursor: help;
+        }
+
+        #run-me::before {
+            content: "$ ";
+            color: #666;
+        }
+
+        #copy-buf {
+            position: absolute;
+            top: -1000px;
+            left: -1000px;
+        }
+
+        #logo {
+            visibility: hidden;
+            text-align: center;
+        }
+
+        #copied {
+            visibility: hidden;
+            color: #b1b5d3;
+            text-align: center;
+        }
     </style>
+    <script>
+        function copyToClipboard() {
+            let runMe = document.getElementById("run-me");
+            let copyBuf = document.getElementById("copy-buf");
+            let cmd = runMe.innerText + '\n';
+            copyBuf.textContent = cmd;
+            copyBuf.select();
+            document.execCommand("copy");
+            document.getElementById("copied").style.visibility = 'visible';
+            document.body.style.backgroundColor = '#21222c';
+            document.body.style.color = '#d14671';
+            document.getElementById("logo").style.visibility = 'visible';
+        }
+    </script>
 </head>
 <body>
     <section>
-        <pre
-            id="run-me"
-            >curl https://play.questdb.io/run.py | python3 - rock-n-roll</pre>
+        <p id="logo">
+            <a href="https://questdb.io/" target="blank"><img alt="QuestDB Logo" src="https://questdb.io/img/questdb-logo-themed.svg" width="305px"/></a>
+        </p>
+        <pre><code
+            onclick="copyToClipboard()"
+            id="run-me">curl https://play.questdb.io/run.py | python3 - rock-n-roll</code></pre>
+        <p id="copied">Copied. Paste in terminal.</p>
     </section>
+    <textarea id="copy-buf"></textarea>
 </body>
 </html>
