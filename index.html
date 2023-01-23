@@ -45,12 +45,35 @@
         #logo {
             visibility: hidden;
             text-align: center;
+            color: white;
         }
 
         #copied {
             visibility: hidden;
             color: #b1b5d3;
             text-align: center;
+        }
+
+        .glow {
+            color: #fff;
+            text-align: center;
+            animation: glow 1s ease-in-out infinite alternate;
+        }
+
+        @-webkit-keyframes glow {
+            from {
+                text-shadow:
+                    0 0 10px #21222c,
+                    0 0 20px #21222c,
+                    0 0 30px #21222c;
+            }
+            
+            to {
+                text-shadow:
+                    0 0 10px #80458d,
+                    0 0 20px #753d82,
+                    0 0 30px #53345a;
+            }
         }
     </style>
     <script>
@@ -76,7 +99,7 @@
         <pre><code
             onclick="copyToClipboard()"
             id="run-me">curl https://play.questdb.io/run.py | python3 - rock-n-roll</code></pre>
-        <p id="copied">Copied. Paste in terminal.</p>
+        <p id="copied" class="glow">Copied. Paste in terminal.</p>
     </section>
     <textarea id="copy-buf"></textarea>
 </body>
