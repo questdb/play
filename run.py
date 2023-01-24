@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
+
 import sys
-sys.dont_write_bytecode = True
 import subprocess
 import os
 import tempfile
@@ -21,7 +22,8 @@ _PIP_DEPS = [
     'questdb',
     'matplotlib',
     'jupyterlab',
-    'requests']
+    'requests',
+    'psycopg[binary]']
 
 
 _QUESTDB_VERSION = '6.7'
@@ -64,6 +66,11 @@ def retry(
             raise TimeoutError(msg)
 
 
+def download(url, dest_path):
+    with urllib.request.urlopen(url) as resp, open(dest_path, 'wb') as dest:
+        shutil.copyfileobj(resp, dest)
+
+
 class QuestDB:
     def __init__(self, tmpdir):
         self.java = find_java()
@@ -80,9 +87,7 @@ class QuestDB:
         download_dir = self.tmpdir / 'download'
         archive_path = download_dir / 'questdb.tar.gz'
         download_dir.mkdir()
-        with urllib.request.urlopen(_QUESTDB_URL) as response, \
-                open(archive_path, 'wb') as archive:
-            shutil.copyfileobj(response, archive)
+        download(_QUESTDB_URL, archive_path)
         print(f'Extracting QuestDB v.{_QUESTDB_VERSION} to {download_dir!r}.')
         with tarfile.open(archive_path) as tar:
             tar.extractall(self.questdb_path)
@@ -92,7 +97,7 @@ class QuestDB:
         (self.questdb_path / 'data' / 'log').mkdir(parents=True)
         shutil.rmtree(download_dir, ignore_errors=True)
 
-    def run_questdb(self):
+    def run(self):
         # TODO: This launch_args is Java11-specific. We should sniff the version and use the right args. 
         # We can probably use a simple "SniffVersion.class" to do this to export some metadata to json.
         launch_args = [
@@ -131,7 +136,7 @@ class QuestDB:
         if self.proc.poll() is not None:
             raise RuntimeError('QuestDB died during startup.')
         req = urllib.request.Request(
-            f'http://localhost:9000/',  # TODO: Parameterize ports.
+            'http://localhost:9000/',  # TODO: Parameterize ports.
             method='HEAD')
         try:
             resp = urllib.request.urlopen(req, timeout=1)
@@ -144,9 +149,14 @@ class QuestDB:
         return False
 
     def stop(self):
+        # Idempotent.
+        if self.proc is None:
+            return
         self.proc.terminate()
         self.proc.wait()
         self.log_file.close()
+        self.proc = None
+        self.log_file = None
 
 
 def start_questdb(tmpdir):
@@ -181,8 +191,10 @@ def setup_venv(tmpdir):
     subprocess.run(
         [sys.executable, '-m', 'venv', str(venv_dir)],
         check=True)
+    pip_path = venv_dir / 'Scripts' / 'pip' \
+        if sys.platform == 'win32' else venv_dir / 'bin' / 'pip'
     subprocess.run(
-        [str(tmpdir / 'venv' / 'Scripts' / 'pip'), 'install'] + _PIP_DEPS,
+        [str(pip_path), 'install'] + _PIP_DEPS,
         cwd=str(venv_dir),
         check=True)
 
@@ -190,6 +202,23 @@ def setup_venv(tmpdir):
 def check_python_version():
     if sys.version_info < (3, 8):
         print('Python 3.8 or later is required')
+        sys.exit(1)
+
+
+_ASK_PROMPT = f'''
+In a temporary directory, this script will:
+    * Download and run QuestDB {_QUESTDB_VERSION}.
+    * Create a Python virtual environment in the same directory.
+        * `pip install`: {_PIP_DEPS}.
+    * Launch a Jupyter notebook in a new browser window.
+
+The directory will be automatically deleted when you exit this script.
+'''
+
+
+def ask_for_permission():
+    print(_ASK_PROMPT)
+    if not input('Continue? [y/N] ').lower().startswith('y'):
         sys.exit(1)
 
 
@@ -205,6 +234,22 @@ def check_java_version():
         sys.exit(1)
 
 
+def start_jupyter_lab(tmpdir, questdb):
+    jupyter_lab_path = tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
+        if sys.platform == 'win32' else tmpdir / 'venv' / 'bin' / 'jupyter-lab'
+    if os.environ.get('LOCAL_RUN') == '1':
+        notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
+    else:
+        notebook_dir = tmpdir / 'notebooks'
+        notebook_dir.mkdir()
+        play_path = notebook_dir / 'play.ipynb'
+        download('https://play.questdb.io/notebooks/play.ipynb', play_path)
+    subprocess.run(
+        [str(jupyter_lab_path)],
+        cwd=str(notebook_dir),
+        check=True)
+
+
 @with_tmpdir
 def main(tmpdir):
     write_readme(tmpdir)
@@ -213,11 +258,13 @@ def main(tmpdir):
     start_fut = tpe.submit(start_questdb, tmpdir)
     setup_venv(tmpdir)
     questdb = start_fut.result()
-    import code
-    code.interact(local=locals(), banner='QuestDB is running. Press Ctrl-D to exit.')
+    start_jupyter_lab(tmpdir, questdb)
+    input('Press Enter to stop QuestDB and exit.')
+    questdb.stop()
 
 
 if __name__ == '__main__':
+    ask_for_permission()
     check_python_version()
     check_java_version()
     main()
