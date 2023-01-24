@@ -32,6 +32,39 @@ _QUESTDB_URL = (
     f'/questdb-{_QUESTDB_VERSION}-no-jre-bin.tar.gz')
 
 
+def confirm_prompt(msg):
+    # Using `input` doesn't work well with stdin redirection on Linux.
+    if sys.platform == 'linux':
+        print('NOTE: Waiting on a dialog box prompt.')
+        retcode = subprocess.call([
+            'xmessage',
+            '-buttons', 'Ok:0,Cancel:1',
+            '-default', 'Ok',
+            '-center',
+            msg])
+        if retcode != 0:
+            sys.exit(1)
+    else:
+        entered = input(msg + ' [Y/n]')
+        if entered.lower() != 'y':
+            sys.exit(1)
+
+
+def wait_prompt():
+    msg = 'Now running QuestDB and JupyterLab.'
+    if sys.platform == 'linux':
+        print('NOTE: Waiting on a dialog box prompt.')
+        subprocess.call([
+            'xmessage',
+            '-buttons', 'Ok:0',
+            '-default', 'Ok',
+            '-center',
+            msg +
+            ' Click "Ok" to stop the services and exit.'])
+    else:
+        input(msg + ' Press Enter to stop the services and exit.')
+
+
 def find_java():
     search_path = None
     java_home = os.environ.get('JAVA_HOME')
@@ -166,6 +199,49 @@ def start_questdb(tmpdir):
     return questdb
 
 
+class JypyterLab:
+    def __init__(self, tmpdir):
+        self.tmpdir = tmpdir
+        self.notebook_dir = None
+        self.script = None
+        self.log_path = self.tmpdir / 'jupyterlab.log'
+        self.log_file = None
+        self.proc = None
+
+    def install(self, questdb):
+        # TODO: Wire-up dynamic ports from QuestDB into `play.ipynb`.
+        self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
+            if sys.platform == 'win32' else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
+        if os.environ.get('LOCAL_RUN') == '1':
+            self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
+        else:
+            self.notebook_dir = self.tmpdir / 'notebooks'
+            self.notebook_dir.mkdir()
+            play_path = self.notebook_dir / 'play.ipynb'
+            download('https://play.questdb.io/notebooks/play.ipynb', play_path)
+
+    def run(self):
+        self.log_file = open(self.log_path, 'ab')
+        self.proc = subprocess.Popen(
+            [str(self.script)],
+            close_fds=True,
+            cwd=self.notebook_dir,
+            stdout=self.log_file,
+            stderr=subprocess.STDOUT)
+
+        atexit.register(self.stop)
+
+    def stop(self):
+        # Idempotent.
+        if self.proc is None:
+            return
+        self.proc.terminate()
+        self.proc.wait()
+        self.log_file.close()
+        self.proc = None
+        self.log_file = None
+
+
 def with_tmpdir(fn):
     def wrapper(*args, **kwargs):
         tmpdir = tempfile.mkdtemp(prefix='questdb_play_')
@@ -213,13 +289,9 @@ In a temporary directory, this script will:
     * Launch a Jupyter notebook in a new browser window.
 
 The directory will be automatically deleted when you exit this script.
+
+Continue?
 '''
-
-
-def ask_for_permission():
-    print(_ASK_PROMPT)
-    if not input('Continue? [y/N] ').lower().startswith('y'):
-        sys.exit(1)
 
 
 def check_java_version():
@@ -235,36 +307,28 @@ def check_java_version():
 
 
 def start_jupyter_lab(tmpdir, questdb):
-    jupyter_lab_path = tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
-        if sys.platform == 'win32' else tmpdir / 'venv' / 'bin' / 'jupyter-lab'
-    if os.environ.get('LOCAL_RUN') == '1':
-        notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
-    else:
-        notebook_dir = tmpdir / 'notebooks'
-        notebook_dir.mkdir()
-        play_path = notebook_dir / 'play.ipynb'
-        download('https://play.questdb.io/notebooks/play.ipynb', play_path)
-    subprocess.run(
-        [str(jupyter_lab_path)],
-        cwd=str(notebook_dir),
-        check=True)
+    lab = JypyterLab(tmpdir)
+    lab.install(questdb)
+    lab.run()
+    return lab
 
 
 @with_tmpdir
 def main(tmpdir):
     write_readme(tmpdir)
-    tpe = ThreadPoolExecutor()
-
+    tpe = ThreadPoolExecutor()  # parallelize QuestDB startup and pip install.
     start_fut = tpe.submit(start_questdb, tmpdir)
     setup_venv(tmpdir)
     questdb = start_fut.result()
-    start_jupyter_lab(tmpdir, questdb)
-    input('Press Enter to stop QuestDB and exit.')
+    lab_proc = start_jupyter_lab(tmpdir, questdb)
+    print('\n\nQuestDB and JupyterLab are now running...')
+    wait_prompt()
+    lab_proc.stop()
     questdb.stop()
 
 
 if __name__ == '__main__':
-    ask_for_permission()
+    confirm_prompt(_ASK_PROMPT)
     check_python_version()
     check_java_version()
     main()
