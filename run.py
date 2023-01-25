@@ -133,18 +133,20 @@ def install_java(tmpdir):
     fname = f'{platform_id}.zip' if is_windows else f'{platform_id}.tar.gz'
     url = f'https://play.questdb.io/jre/{fname}'
     download_dir = tmpdir / 'download'
-    dest_dir = tmpdir / 'jre'
-    dest_dir.mkdir()
+    extraction_dir = tmpdir / 'download' / 'jre'
+    extraction_dir.mkdir()
     archive_path = download_dir / fname
     download(url, archive_path)
     if is_windows:
         with zipfile.ZipFile(archive_path) as zipfile:
-            zipfile.extractall(dest_dir)
+            zipfile.extractall(extraction_dir)
     else:
         with tarfile.open(archive_path) as tar:
-            tar.extractall(dest_dir)
-    extracted_dir = first_dir(dest_dir)
-    extracted_dir.rename(tmpdir / 'jre')
+            tar.extractall(extraction_dir)
+    unpacked_jre_dir = first_dir(extraction_dir)
+    if sys.platform == 'darwin':
+        unpacked_jre_dir = unpacked_jre_dir / 'Contents' / 'Home'
+    shutil.move(unpacked_jre_dir, tmpdir / 'jre')
 
 
 class QuestDB:
@@ -173,7 +175,6 @@ class QuestDB:
         # Rename "questdb-6.7-no-jre-bin" or similar to "bin"
         next(self.questdb_path.glob("**/questdb.jar")).parent.rename(questdb_bin_path)
         (self.questdb_path / 'data' / 'log').mkdir(parents=True)
-        shutil.rmtree(download_dir, ignore_errors=True)
 
     def run(self):
         launch_args = [
@@ -235,7 +236,7 @@ class QuestDB:
         self.log_file = None
 
 
-class JypyterLab:
+class JupyterLab:
     def __init__(self, tmpdir):
         self.tmpdir = tmpdir
         self.notebook_dir = None
@@ -343,7 +344,7 @@ def check_java_version():
 
 
 def start_jupyter_lab(tmpdir, questdb):
-    lab = JypyterLab(tmpdir)
+    lab = JupyterLab(tmpdir)
     lab.install(questdb)
     lab.run()
     return lab
@@ -352,14 +353,16 @@ def start_jupyter_lab(tmpdir, questdb):
 @with_tmpdir
 def main(tmpdir):
     write_readme(tmpdir)
-    (tmpdir / 'download').mkdir()
+    download_dir = tmpdir / 'download'
+    download_dir.mkdir()
     tpe = ThreadPoolExecutor()  # parallelize QuestDB startup and pip install.
     questdb = QuestDB(tmpdir)
-    install_questdb_fut = tpe.submit(questdb.install)
     install_java_fut = tpe.submit(install_java, tmpdir)
+    install_questdb_fut = tpe.submit(questdb.install)
     setup_venv(tmpdir)
-    questdb = install_questdb_fut.result()
     install_java_fut.result()
+    install_questdb_fut.result()
+    shutil.rmtree(download_dir, ignore_errors=True)
     lab_proc = start_jupyter_lab(tmpdir, questdb)
     questdb.run()
     print('\n\nQuestDB and JupyterLab are now running...')
