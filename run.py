@@ -138,8 +138,8 @@ def install_java(tmpdir):
     archive_path = download_dir / fname
     download(url, archive_path)
     if is_windows:
-        with zipfile.ZipFile(archive_path) as zipfile:
-            zipfile.extractall(extraction_dir)
+        with zipfile.ZipFile(archive_path) as zip:
+            zip.extractall(extraction_dir)
     else:
         with tarfile.open(archive_path) as tar:
             tar.extractall(extraction_dir)
