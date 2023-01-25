@@ -15,6 +15,10 @@ import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+if sys.platform == 'win32':
+    import ctypes
+    USER32 = ctypes.windll.user32
+
 _PIP_DEPS = [
     'pyarrow',
     'numpy',
@@ -50,10 +54,13 @@ def confirm_prompt(msg):
             msg])
         if retcode != 0:
             sys.exit(1)
-    else:
-        entered = input(msg + ' [Y/n]')
-        if entered.lower() != 'y':
+    elif sys.platform == 'win32':
+        ok_cancel = 1
+        button = USER32.MessageBoxW(0, msg, 'QuestDB', ok_cancel)
+        if button != 1:  # OK
             sys.exit(1)
+    else:
+        raise RuntimeError('Unsupported platform: {}'.format(sys.platform))
 
 
 def wait_prompt():
@@ -73,10 +80,13 @@ def wait_prompt():
             '-center',
             msg +
             ' Click "Ok" to stop the services and exit.'])
-    else:
-        msg += ' Press Enter to stop the services, '
+    elif sys.platform == 'win32':
+        msg += '\nClick "Ok" to halt the services, '
         msg += 'delete temporary files and exit.'
-        input(msg)
+        ok = 0
+        USER32.MessageBoxW(0, msg, 'QuestDB', ok)
+    else:
+        raise RuntimeError('Unsupported platform: {}'.format(sys.platform))
 
 
 def find_java():
