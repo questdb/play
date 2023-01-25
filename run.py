@@ -7,12 +7,14 @@ import tempfile
 import shutil
 import pathlib
 import tarfile
+import zipfile
 import urllib.request
 import urllib.parse
 import urllib.error
 import atexit
 import socket
 import time
+import platform
 from concurrent.futures import ThreadPoolExecutor
 
 _PIP_DEPS = [
@@ -79,14 +81,6 @@ def wait_prompt():
         input(msg)
 
 
-def find_java():
-    search_path = None
-    java_home = os.environ.get('JAVA_HOME')
-    if java_home:
-        search_path = pathlib.Path(java_home) / 'bin'
-    return shutil.which('java', path=str(search_path))
-
-
 def retry(
     predicate_task,
     timeout_sec=30,
@@ -118,10 +112,38 @@ def download(url, dest_path):
         shutil.copyfileobj(resp, dest)
 
 
+def first_dir(path):
+    return next(path.iterdir())
+
+
+def install_java(tmpdir):
+    print('Downloading and installing Java 11.')
+    platform_id = f'{sys.platform}-{platform.machine()}'
+    is_windows = sys.platform == 'win32'
+    fname = f'{platform_id}.zip' if is_windows else f'{platform_id}.tar.gz'
+    url = f'https://play.questdb.io/jre/{fname}'
+    download_dir = tmpdir / 'download'
+    dest_dir = tmpdir / 'jre'
+    dest_dir.mkdir()
+    archive_path = download_dir / fname
+    download(url, archive_path)
+    if is_windows:
+        with zipfile.ZipFile(archive_path) as zipfile:
+            zipfile.extractall(dest_dir)
+    else:
+        with tarfile.open(archive_path) as tar:
+            tar.extractall(dest_dir)
+    extracted_dir = first_dir(dest_dir)
+    extracted_dir.rename(tmpdir / 'jre')
+
+
 class QuestDB:
     def __init__(self, tmpdir):
-        self.java = find_java()
         self.tmpdir = tmpdir
+        if sys.platform == 'win32':
+            self.java = tmpdir / 'jre' / 'bin' / 'java.exe'
+        else:
+            self.java = tmpdir / 'jre' / 'bin' / 'java'
         self.questdb_path = tmpdir / 'questdb'
         self.jar_path = self.questdb_path / 'bin' / 'questdb.jar'
         self.data_path = self.questdb_path / 'data'
@@ -133,7 +155,6 @@ class QuestDB:
         print(f'Downloading QuestDB v.{_QUESTDB_VERSION} from {_QUESTDB_URL!r}.')
         download_dir = self.tmpdir / 'download'
         archive_path = download_dir / 'questdb.tar.gz'
-        download_dir.mkdir()
         download(_QUESTDB_URL, archive_path)
         print(f'Extracting QuestDB v.{_QUESTDB_VERSION} to {download_dir!r}.')
         with tarfile.open(archive_path) as tar:
@@ -145,8 +166,6 @@ class QuestDB:
         shutil.rmtree(download_dir, ignore_errors=True)
 
     def run(self):
-        # TODO: This launch_args is Java11-specific. We should sniff the version and use the right args. 
-        # We can probably use a simple "SniffVersion.class" to do this to export some metadata to json.
         launch_args = [
             self.java,
             '-DQuestDB-Runtime-0',
@@ -204,13 +223,6 @@ class QuestDB:
         self.log_file.close()
         self.proc = None
         self.log_file = None
-
-
-def start_questdb(tmpdir):
-    questdb = QuestDB(tmpdir)
-    questdb.install()
-    questdb.run()
-    return questdb
 
 
 class JypyterLab:
@@ -330,11 +342,16 @@ def start_jupyter_lab(tmpdir, questdb):
 @with_tmpdir
 def main(tmpdir):
     write_readme(tmpdir)
+    (tmpdir / 'download').mkdir()
     tpe = ThreadPoolExecutor()  # parallelize QuestDB startup and pip install.
-    start_fut = tpe.submit(start_questdb, tmpdir)
+    questdb = QuestDB(tmpdir)
+    install_questdb_fut = tpe.submit(questdb.install)
+    install_java_fut = tpe.submit(install_java, tmpdir)
     setup_venv(tmpdir)
-    questdb = start_fut.result()
+    questdb = install_questdb_fut.result()
+    install_java_fut.result()
     lab_proc = start_jupyter_lab(tmpdir, questdb)
+    questdb.run()
     print('\n\nQuestDB and JupyterLab are now running...')
     wait_prompt()
     lab_proc.stop()
@@ -344,5 +361,4 @@ def main(tmpdir):
 if __name__ == '__main__':
     confirm_prompt(_ASK_PROMPT)
     check_python_version()
-    check_java_version()
     main()
