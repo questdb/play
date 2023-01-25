@@ -131,7 +131,7 @@
         function copyToClipboard() {
             let runMe = document.getElementById("run-me");
             let copyBuf = document.getElementById("copy-buf");
-            let cmd = runMe.innerText + '\n';
+            let cmd = runMe.innerText;
             copyBuf.textContent = cmd;
             copyBuf.select();
             document.execCommand("copy");
