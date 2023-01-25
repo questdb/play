@@ -33,9 +33,15 @@ _QUESTDB_URL = (
 
 
 def confirm_prompt(msg):
-    # Using `input` doesn't work well with stdin redirection on Linux.
-    if sys.platform == 'linux':
-        print('NOTE: Waiting on a dialog box prompt.')
+    print('NOTE: Waiting on a dialog box prompt.')
+    if sys.platform == 'darwin':
+        retcode = subprocess.call([
+            'osascript',
+            '-e', 'display dialog "{}"'.format(msg),
+            '-e', 'button returned of result'])
+        if retcode != 0:
+            sys.exit(1)
+    elif sys.platform == 'linux':
         retcode = subprocess.call([
             'xmessage',
             '-buttons', 'Ok:0,Cancel:1',
@@ -52,8 +58,14 @@ def confirm_prompt(msg):
 
 def wait_prompt():
     msg = 'Now running QuestDB and JupyterLab.'
-    if sys.platform == 'linux':
-        print('NOTE: Waiting on a dialog box prompt.')
+    print('NOTE: Waiting on a dialog box prompt.')
+    if sys.platform == 'darwin':
+        msg += '\nClick \\"Stop\\" to halt the services, '
+        msg += 'delete temporary files and exit.'
+        subprocess.call([
+            'osascript',
+            '-e', f'display dialog "{msg}" buttons {{"Stop"}}'])
+    elif sys.platform == 'linux':
         subprocess.call([
             'xmessage',
             '-buttons', 'Ok:0',
@@ -62,7 +74,9 @@ def wait_prompt():
             msg +
             ' Click "Ok" to stop the services and exit.'])
     else:
-        input(msg + ' Press Enter to stop the services and exit.')
+        msg += ' Press Enter to stop the services, '
+        msg += 'delete temporary files and exit.'
+        input(msg)
 
 
 def find_java():
