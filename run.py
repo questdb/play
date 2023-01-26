@@ -14,6 +14,7 @@ import urllib.error
 import atexit
 import socket
 import time
+import json
 import platform
 from concurrent.futures import ThreadPoolExecutor
 
@@ -73,6 +74,15 @@ def wait_prompt():
     except KeyboardInterrupt:
         pass
     print('Stopping services, deleting temporary files and exiting.')
+
+
+def avail_port():
+    s = socket.socket()
+    try:
+        s.bind(('', 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
 
 
 def retry(
@@ -159,6 +169,36 @@ class QuestDB:
         # Rename "questdb-6.7-no-jre-bin" or similar to "bin"
         next(self.questdb_path.glob("**/questdb.jar")).parent.rename(questdb_bin_path)
         (self.questdb_path / 'data' / 'log').mkdir(parents=True)
+        self.configure()
+
+    def configure(self):
+        self.ilp_port = avail_port()
+        self.pg_port = avail_port()
+        self.http_port = avail_port()
+        self.http_min_port = avail_port()
+        overrides = {
+            'http.bind.to': f'0.0.0.0:{self.http_port}',
+            'pg.net.bind.to': f'0.0.0.0:{self.pg_port}',
+            'line.tcp.net.bind.to': f'0.0.0.0:{self.ilp_port}',
+            'line.udp.bind.to': f'0.0.0.0:{self.ilp_port}',
+            'http.min.bind.to': f'0.0.0.0:{self.http_min_port}',
+        }
+        # No conf file extracted from the tarball, so we'll create one.
+        # We pluck it out of the .jar and the patch it.
+        with zipfile.ZipFile(self.jar_path) as zip:
+            conf_lines = zip.read('io/questdb/site/conf/server.conf')
+            conf_lines = conf_lines.decode('utf-8').splitlines()
+        conf_path = self.questdb_path / 'data' / 'conf' / 'server.conf'
+        conf_path.parent.mkdir(parents=True)
+        with conf_path.open('w', encoding='utf-8') as conf:
+            for line in conf_lines:
+                if ('=' in line) and (line.split('=')[0] in overrides):
+                    # Comment out lines we'll override.
+                    conf.write(f'#{line}')
+                conf.write(line)
+            conf.write('\n# Dynamic ports configuration\n')
+            for key, value in overrides.items():
+                conf.write(f'{key}={value}\n')
 
     def run(self):
         launch_args = [
@@ -197,7 +237,7 @@ class QuestDB:
         if self.proc.poll() is not None:
             raise RuntimeError('QuestDB died during startup.')
         req = urllib.request.Request(
-            'http://localhost:9000/',  # TODO: Parameterize ports.
+            f'http://localhost:{self.http_port}/',
             method='HEAD')
         try:
             resp = urllib.request.urlopen(req, timeout=1)
@@ -228,23 +268,42 @@ class JupyterLab:
         self.log_path = self.tmpdir / 'jupyterlab.log'
         self.log_file = None
         self.proc = None
+        self.play_notebook_path = None
+        self.port = None
 
-    def install(self, questdb):
+    def install(self):
         # TODO: Wire-up dynamic ports from QuestDB into `play.ipynb`.
         self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
             if sys.platform == 'win32' else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
         if os.environ.get('LOCAL_RUN') == '1':
             self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
+            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
         else:
             self.notebook_dir = self.tmpdir / 'notebooks'
             self.notebook_dir.mkdir()
-            play_path = self.notebook_dir / 'play.ipynb'
-            download('https://play.questdb.io/notebooks/play.ipynb', play_path)
+            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
+            download(
+                'https://play.questdb.io/notebooks/play.ipynb',
+                self.play_notebook_path)
+
+    def configure(self, questdb):
+        with self.play_notebook_path.open('r') as play_file:
+            play = json.load(play_file)
+
+            # Patch up the contents of the second cell.
+            play['cells'][2]['source'] = [
+                '# This demo relies on dynamic network ports for the core endpoints.\n',
+                f'http_port = {questdb.http_port}  # Web Console and REST API\n',
+                f'ilp_port = {questdb.ilp_port}  # Fast data ingestion port \n',
+                f'pg_port = {questdb.pg_port}  # PostgreSQL-compatible endpoint']
+        with self.play_notebook_path.open('w') as play_file:
+            json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
+        self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
         self.proc = subprocess.Popen(
-            [str(self.script)],
+            [str(self.script), '--port', str(self.port)],
             close_fds=True,
             cwd=self.notebook_dir,
             stdout=self.log_file,
@@ -315,21 +374,10 @@ Continue?
 '''
 
 
-def check_java_version():
-    java = find_java()
-    java_version = subprocess.run(
-        [str(java), '-version'],
-        stderr=subprocess.PIPE,
-        check=True,
-        encoding='utf-8')
-    if '11.' not in java_version.stderr:
-        print('Java 11 is required')
-        sys.exit(1)
-
-
 def start_jupyter_lab(tmpdir, questdb):
     lab = JupyterLab(tmpdir)
-    lab.install(questdb)
+    lab.install()
+    lab.configure(questdb)
     lab.run()
     return lab
 
@@ -346,13 +394,12 @@ def main(tmpdir):
     setup_venv(tmpdir)
     install_java_fut.result()
     install_questdb_fut.result()
-    shutil.rmtree(download_dir, ignore_errors=True)
-    lab_proc = start_jupyter_lab(tmpdir, questdb)
+    lab = start_jupyter_lab(tmpdir, questdb)
     questdb.run()
     time.sleep(3)  # A few seconds for the Web browser to start up.
     print('\n\nQuestDB and JupyterLab are now running...')
     wait_prompt()
-    lab_proc.stop()
+    lab.stop()
     questdb.stop()
 
 
