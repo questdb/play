@@ -18,9 +18,6 @@ import json
 import platform
 from concurrent.futures import ThreadPoolExecutor
 
-if sys.platform == 'win32':
-    import ctypes
-    USER32 = ctypes.windll.user32
 
 _PIP_DEPS = [
     'pyarrow',
@@ -37,33 +34,6 @@ _QUESTDB_VERSION = '6.7'
 _QUESTDB_URL = (
     f'https://github.com/questdb/questdb/releases/download/{_QUESTDB_VERSION}' +
     f'/questdb-{_QUESTDB_VERSION}-no-jre-bin.tar.gz')
-
-
-def confirm_prompt(msg):
-    print('NOTE: Waiting on a dialog box prompt.')
-    if sys.platform == 'darwin':
-        retcode = subprocess.call([
-            'osascript',
-            '-e', 'display dialog "{}"'.format(msg),
-            '-e', 'button returned of result'])
-        if retcode != 0:
-            sys.exit(1)
-    elif sys.platform == 'linux':
-        retcode = subprocess.call([
-            'xmessage',
-            '-buttons', 'Ok:0,Cancel:1',
-            '-default', 'Ok',
-            '-center',
-            msg])
-        if retcode != 0:
-            sys.exit(1)
-    elif sys.platform == 'win32':
-        ok_cancel = 1
-        button = USER32.MessageBoxW(0, msg, 'QuestDB', ok_cancel)
-        if button != 1:  # OK
-            sys.exit(1)
-    else:
-        raise RuntimeError('Unsupported platform: {}'.format(sys.platform))
 
 
 def wait_prompt():
@@ -350,7 +320,7 @@ def setup_venv(tmpdir):
     pip_path = venv_dir / 'Scripts' / 'pip' \
         if sys.platform == 'win32' else venv_dir / 'bin' / 'pip'
     subprocess.run(
-        [str(pip_path), 'install'] + _PIP_DEPS,
+        [str(pip_path), 'install', '--only-binary', ':all:'] + _PIP_DEPS,
         cwd=str(venv_dir),
         check=True)
 
@@ -370,8 +340,7 @@ In a temporary directory, this script will:
 
 The directory will be automatically deleted when you exit this script.
 
-Continue?
-'''
+Continue? [Y/n] '''
 
 
 def start_jupyter_lab(tmpdir, questdb):
@@ -404,7 +373,9 @@ def main(tmpdir):
 
 
 if __name__ == '__main__':
-    confirm_prompt(_ASK_PROMPT)
+    if input(_ASK_PROMPT).lower().strip() not in ('y', ''):
+        print('Aborted')
+        sys.exit(1)
     check_python_version()
     main()
     print('\nThanks for trying QuestDB!\n')
