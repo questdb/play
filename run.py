@@ -125,7 +125,7 @@ def install_java(tmpdir):
     platform_id = f'{sys.platform}-{platform.machine()}'
     is_windows = sys.platform == 'win32'
     fname = f'{platform_id}.zip' if is_windows else f'{platform_id}.tar.gz'
-    url = f'https://play.questdb.io/jre/{fname}'
+    url = f'https://dl.questdb.io/play/jre/{fname}'
     download_dir = tmpdir / 'download'
     extraction_dir = tmpdir / 'download' / 'jre'
     extraction_dir.mkdir()
@@ -283,7 +283,7 @@ class JupyterLab:
             self.notebook_dir.mkdir()
             self.play_notebook_path = self.notebook_dir / 'play.ipynb'
             download(
-                'https://play.questdb.io/notebooks/play.ipynb',
+                'https://dl.questdb.io/play/notebooks/play.ipynb',
                 self.play_notebook_path)
 
     def configure(self, questdb):

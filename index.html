@@ -65,7 +65,7 @@
             margin: 0;
             border: 0;
             padding: 0;
-            font-size: 1.6em;
+            font-size: 1.4em;
             font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,Cantarell,Helvetica,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Android Emoji",EmojiSymbols,"EmojiOne Mozilla","Twemoji Mozilla","Segoe UI Symbol","Noto Color Emoji";
         }
 
@@ -149,7 +149,7 @@
         </p>
         <pre><code
             onclick="copyToClipboard()"
-            id="run-me">curl https://play.questdb.io/run.py | python3 - rock-n-roll</code></pre>
+            id="run-me">python3 -c "import urllib.request as w;s=w.urlopen('https://dl.questdb.io/play/run.py').read().decode();exec(s)"</code></pre>
         <p id="copied" class="glow">Copied. Paste in terminal.</p>
     </section>
     <textarea id="copy-buf"></textarea>
