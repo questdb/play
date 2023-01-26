@@ -66,29 +66,13 @@ def confirm_prompt(msg):
 
 
 def wait_prompt():
-    msg = 'Now running QuestDB and JupyterLab.'
-    print('NOTE: Waiting on a dialog box prompt.')
-    if sys.platform == 'darwin':
-        msg += '\nClick \\"Stop\\" to halt the services, '
-        msg += 'delete temporary files and exit.'
-        subprocess.call([
-            'osascript',
-            '-e', f'display dialog "{msg}" buttons {{"Stop"}}'])
-    elif sys.platform == 'linux':
-        subprocess.call([
-            'xmessage',
-            '-buttons', 'Ok:0',
-            '-default', 'Ok',
-            '-center',
-            msg +
-            ' Click "Ok" to stop the services and exit.'])
-    elif sys.platform == 'win32':
-        msg += '\nClick "Ok" to halt the services, '
-        msg += 'delete temporary files and exit.'
-        ok = 0
-        USER32.MessageBoxW(0, msg, 'QuestDB', ok)
-    else:
-        raise RuntimeError('Unsupported platform: {}'.format(sys.platform))
+    print('Press Ctrl+C to exit.')
+    try:
+        while True:
+            time.sleep(5)
+    except KeyboardInterrupt:
+        pass
+    print('Stopping services, deleting temporary files and exiting.')
 
 
 def retry(
@@ -355,7 +339,7 @@ def main(tmpdir):
     write_readme(tmpdir)
     download_dir = tmpdir / 'download'
     download_dir.mkdir()
-    tpe = ThreadPoolExecutor()  # parallelize QuestDB startup and pip install.
+    tpe = ThreadPoolExecutor()
     questdb = QuestDB(tmpdir)
     install_java_fut = tpe.submit(install_java, tmpdir)
     install_questdb_fut = tpe.submit(questdb.install)
@@ -365,6 +349,7 @@ def main(tmpdir):
     shutil.rmtree(download_dir, ignore_errors=True)
     lab_proc = start_jupyter_lab(tmpdir, questdb)
     questdb.run()
+    time.sleep(3)  # A few seconds for the Web browser to start up.
     print('\n\nQuestDB and JupyterLab are now running...')
     wait_prompt()
     lab_proc.stop()
@@ -375,3 +360,9 @@ if __name__ == '__main__':
     confirm_prompt(_ASK_PROMPT)
     check_python_version()
     main()
+    print('\nThanks for trying QuestDB!\n')
+    print('Learn more:')
+    print(' * https://questdb.io/docs/')
+    print(' * https://questdb.io/cloud/')
+    print(' * https://slack.questdb.io/')
+    print('')
