@@ -284,37 +284,7 @@ class JupyterLab:
             stderr=subprocess.STDOUT)
 
         atexit.register(self.stop)
-
-        # print('Waiting until JupyterLab is up.')
-        # retry(
-        #     self.check_jupyterlab_up,
-        #     timeout_sec=30,
-        #     msg='Timed out waiting for JupyterLab to come up.')
-        # print('JupyterLab is up.')
-
         self.discover_url()
-
-    def check_jupyterlab_up(self):
-        print('check_jupyterlab_up :: (A)')
-        if self.proc.poll() is not None:
-            raise RuntimeError('JupyterLab died during startup.')
-        req = urllib.request.Request(
-            f'http://localhost:{self.port}/',
-            method='HEAD')
-        try:
-            print('check_jupyterlab_up :: (B)')
-            resp = urllib.request.urlopen(req, timeout=1)
-            print(f'check_jupyterlab_up :: (C) {resp.status}')
-            if resp.status == 200:
-                return True
-        except socket.timeout:
-            print(f'check_jupyterlab_up :: (D)')
-            pass
-        except urllib.error.URLError as url_err:
-            print(f'check_jupyterlab_up :: (E): {url_err}')
-            pass
-        print(f'check_jupyterlab_up :: (F)')
-        return False
 
     def scan_log_for_url(self):
         if self.proc.poll() is not None:
