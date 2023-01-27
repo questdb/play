@@ -48,6 +48,13 @@ def wait_prompt():
     print('\nStopping services, deleting temporary files and exiting.')
 
 
+def running_in_docker():
+    return pathlib.Path('/.dockerenv').exists()
+
+
+IN_DOCKER = running_in_docker()
+
+
 def avail_port():
     s = socket.socket()
     try:
@@ -115,6 +122,19 @@ def install_java(tmpdir):
     shutil.move(unpacked_jre_dir, tmpdir / 'jre')
 
 
+def tail_log(path, lines=30):
+    log = 'No log available.'
+    try:
+        with open(path, 'r', encoding='utf-8') as log_file:
+            log = log_file.readlines()[-lines:]
+        log = ''.join(log)
+        log = textwrap.indent(log, '    ')
+        log = f'Tail of log:\n{log}'
+    except:
+        pass
+    return log
+
+
 class QuestDB:
     def __init__(self, tmpdir):
         self.tmpdir = tmpdir
@@ -144,17 +164,26 @@ class QuestDB:
         self.configure()
 
     def configure(self):
-        self.ilp_port = avail_port()
-        self.pg_port = avail_port()
-        self.http_port = avail_port()
-        self.http_min_port = avail_port()
-        overrides = {
-            'http.bind.to': f'0.0.0.0:{self.http_port}',
-            'pg.net.bind.to': f'0.0.0.0:{self.pg_port}',
-            'line.tcp.net.bind.to': f'0.0.0.0:{self.ilp_port}',
-            'line.udp.bind.to': f'0.0.0.0:{self.ilp_port}',
-            'http.min.bind.to': f'0.0.0.0:{self.http_min_port}',
-        }
+        if IN_DOCKER:
+            self.ilp_port = 9009
+            self.pg_port = 8812
+            self.http_port = 9000
+            self.http_min_port = 9003
+        else:
+            self.ilp_port = avail_port()
+            self.pg_port = avail_port()
+            self.http_port = avail_port()
+            self.http_min_port = avail_port()
+            overrides = {
+                'http.bind.to': f'127.0.0.1:{self.http_port}',
+                'pg.net.bind.to': f'127.0.0.1:{self.pg_port}',
+                'line.tcp.net.bind.to': f'127.0.0.1:{self.ilp_port}',
+                'line.udp.bind.to': f'127.0.0.1:{self.ilp_port}',
+                'http.min.net.bind.to': f'127.0.0.1:{self.http_min_port}',
+            }
+            self.override_conf(overrides)
+
+    def override_conf(self, overrides):
         # No conf file extracted from the tarball, so we'll create one.
         # We pluck it out of the .jar and the patch it.
         with zipfile.ZipFile(self.jar_path) as zip:
@@ -207,7 +236,8 @@ class QuestDB:
 
     def check_http_up(self):
         if self.proc.poll() is not None:
-            raise RuntimeError('QuestDB died during startup.')
+            log = tail_log(self.log_path)
+            raise RuntimeError(f'QuestDB died during startup. {log}')
         req = urllib.request.Request(
             f'http://localhost:{self.http_port}/',
             method='HEAD')
@@ -272,13 +302,19 @@ class JupyterLab:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
-        self.port = avail_port()
+        if IN_DOCKER:
+            self.port = avail_port()
+        else:
+            self.port = 8888
         self.log_file = open(self.log_path, 'ab')
-        self.proc = subprocess.Popen([
+        args = [
                 str(self.script),
                 '--port', str(self.port),
                 '--no-browser',
-                'play.ipynb'],
+                'play.ipynb']
+        if IN_DOCKER:
+            args.append('--allow-root')
+        self.proc = subprocess.Popen(args,
             close_fds=True,
             cwd=self.notebook_dir,
             stdout=self.log_file,
@@ -289,15 +325,7 @@ class JupyterLab:
 
     def scan_log_for_url(self):
         if self.proc.poll() is not None:
-            log = 'No jupyter log available.'
-            try:
-                with open(self.log_path, 'r') as log_file:
-                    log = log_file.readlines()[-20:]
-                log = ''.join(log)
-                log = textwrap.indent(log, '    ')
-                log = 'Last 20 lines of Jupyter log:\n'
-            except:
-                pass
+            log = tail_log(self.log_path)
             raise RuntimeError(f'JupyterLab died during startup. {log}')
         with open(self.log_path, 'r') as log_file:
             for line in log_file:
@@ -418,7 +446,15 @@ def main(tmpdir):
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * Temporary directory: {tmpdir}')
     print(f' * JupyterLab: {lab.url}.')
-    print(f' * QuestDB Web Console: http://localhost:{questdb.http_port}/')
+    print(f' * QuestDB:')
+    print(f'    * Web Console / REST API: http://localhost:{questdb.http_port}/')
+    print(f'    * PSQL: psql -h localhost -p {questdb.psql_port} -U admin -d qdb')
+    print(f'    * ILP Protocol, port: {questdb.ilp_port}')
+    if IN_DOCKER:
+        print('')
+        print('It also looks like you are running this script in a Docker container.')
+        print('You may need to forward ports to your host machine:')
+        print('   -p 8888:8888 -p 9000:9000 -p 8812:8812 -p 9009:9009')
     print('\n')
     try_open_browser(lab.url)
     wait_prompt()
