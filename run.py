@@ -451,7 +451,7 @@ def main(tmpdir):
     hostname = lab.url.split('://')[1].split(':')[0]
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * Temporary directory: {tmpdir}')
-    print(f' * JupyterLab: {lab.url}.')
+    print(f' * JupyterLab: {lab.url}')
     print(' * QuestDB:')
     print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
     print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb')
