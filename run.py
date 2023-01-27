@@ -336,6 +336,9 @@ class JupyterLab:
             for line in log_file:
                 if ('    http://' in line) and (f':{self.port}/lab?token=' in line):
                     self.url = line.strip()
+                    self.hostname = self.url.split('://')[1].split(':')[0]
+                    self.token = self.url.split('token=')[1]
+                    self.url = f'http://{self.hostname}:{self.port}/lab/tree/play.ipynb?token={self.token}'
                     print(f'JupyterLab URL: {self.url}')
                     return True
         return False
@@ -454,15 +457,17 @@ def main(tmpdir):
     setup_venv(tmpdir)
     install_java_fut.result()
     install_questdb_fut.result()
-    lab = start_jupyter_lab(tmpdir, questdb)
-    questdb.run()
-    hostname = lab.url.split('://')[1].split(':')[0]
+    lab_fut = tpe.submit(start_jupyter_lab, tmpdir, questdb)
+    questdb_run_fut = tpe.submit(questdb.run)
+    lab = lab_fut.result()
+    questdb_run_fut.result()
+    hostname = lab.hostname
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * Temporary directory: {tmpdir}')
     print(f' * JupyterLab: {lab.url}')
     print(' * QuestDB:')
     print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb')
+    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb  # password: quest')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
     if IN_DOCKER:
         print('')
