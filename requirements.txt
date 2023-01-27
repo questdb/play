@@ -1,0 +1,10 @@
+pillow
+pyarrow
+numpy
+pandas
+questdb
+matplotlib
+jupyterlab
+plotly
+requests
+psycopg[binary]

@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+PLAY_QUESTDB_README.txt
+.idea/
+
 # C extensions
 *.so
 
