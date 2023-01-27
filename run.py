@@ -413,7 +413,12 @@ def setup_venv(tmpdir):
 
 
 def check_python_version():
-    if sys.version_info < (3, 8):
+    if (sys.platform == 'darwin') and \
+            (platform.machine() == 'arm64') and (sys.version_info < (3, 9)):
+        print('Python 3.9 or later is required on Apple Silicon.')
+        print('Go get it from Homebrew or Python.org.')
+        sys.exit(1)
+    elif sys.version_info < (3, 8):
         print('Python 3.8 or later is required.')
         sys.exit(1)
 
