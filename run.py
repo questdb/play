@@ -386,6 +386,14 @@ def setup_venv(tmpdir):
         check=True)
     pip_path = venv_dir / 'Scripts' / 'pip' \
         if IS_WINDOWS else venv_dir / 'bin' / 'pip'
+
+    # First, upgrade `pip` and `setuptools` in the venv. These may be too old.
+    subprocess.run(
+        [str(pip_path), 'install', '--upgrade', 'pip', 'setuptools'],
+        cwd=str(venv_dir),
+        check=True)
+
+    # Now, install dependencies.
     opts = [
         '--upgrade',
         '--no-cache-dir',
