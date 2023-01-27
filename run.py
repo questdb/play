@@ -17,6 +17,7 @@ import time
 import json
 import platform
 import webbrowser
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -288,7 +289,16 @@ class JupyterLab:
 
     def scan_log_for_url(self):
         if self.proc.poll() is not None:
-            raise RuntimeError('JupyterLab died during startup.')
+            log = 'No jupyter log available.'
+            try:
+                with open(self.log_path, 'r') as log_file:
+                    log = log_file.readlines()[-20:]
+                log = ''.join(log)
+                log = textwrap.indent(log, '    ')
+                log = 'Last 20 lines of Jupyter log:\n'
+            except:
+                pass
+            raise RuntimeError(f'JupyterLab died during startup. {log}')
         with open(self.log_path, 'r') as log_file:
             for line in log_file:
                 if f'    http://localhost:{self.port}/lab?token=' in line:
