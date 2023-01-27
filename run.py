@@ -319,8 +319,17 @@ def setup_venv(tmpdir):
         check=True)
     pip_path = venv_dir / 'Scripts' / 'pip' \
         if sys.platform == 'win32' else venv_dir / 'bin' / 'pip'
+    opts = [
+        '--upgrade',
+        '--no-cache-dir',
+        '--no-warn-script-location',
+        '--disable-pip-version-check',
+        '--ignore-installed',
+        '--no-input',
+        '--no-compile',
+        '--only-binary', ':all:']
     subprocess.run(
-        [str(pip_path), 'install', '--only-binary', ':all:'] + _PIP_DEPS,
+        [str(pip_path), 'install'] + opts + _PIP_DEPS,
         cwd=str(venv_dir),
         check=True)
 
