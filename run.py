@@ -487,10 +487,10 @@ def main(tmpdir):
 
 
 if __name__ == '__main__':
+    check_python_version()
     if input(_ASK_PROMPT).lower().strip() not in ('y', ''):
         print('Aborted')
         sys.exit(1)
-    check_python_version()
     main()
     print('\nThanks for trying QuestDB!\n')
     print('Learn more:')
