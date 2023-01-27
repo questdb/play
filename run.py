@@ -181,8 +181,8 @@ class QuestDB:
                 'http.bind.to': f'{self.host}:{self.http_port}',
                 'pg.net.bind.to': f'{self.host}:{self.pg_port}',
                 'line.tcp.net.bind.to': f'{self.host}:{self.ilp_port}',
-                'line.udp.bind.to': f'{self.host}:{self.ilp_port}',
                 'http.min.net.bind.to': f'{self.host}:{self.http_min_port}',
+                'line.udp.enabled': 'false',
             }
             self.override_conf(overrides)
 
