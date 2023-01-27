@@ -55,6 +55,9 @@ def running_in_docker():
 IN_DOCKER = running_in_docker()
 
 
+IS_WINDOWS = sys.platform == 'win32'
+
+
 def avail_port():
     s = socket.socket()
     try:
@@ -102,15 +105,14 @@ def first_dir(path):
 def install_java(tmpdir):
     print('Downloading and installing Java 11.')
     platform_id = f'{sys.platform}-{platform.machine()}'
-    is_windows = sys.platform == 'win32'
-    fname = f'{platform_id}.zip' if is_windows else f'{platform_id}.tar.gz'
+    fname = f'{platform_id}.zip' if IS_WINDOWS else f'{platform_id}.tar.gz'
     url = f'https://dl.questdb.io/play/jre/{fname}'
     download_dir = tmpdir / 'download'
     extraction_dir = tmpdir / 'download' / 'jre'
     extraction_dir.mkdir()
     archive_path = download_dir / fname
     download(url, archive_path)
-    if is_windows:
+    if IS_WINDOWS:
         with zipfile.ZipFile(archive_path) as zip:
             zip.extractall(extraction_dir)
     else:
@@ -138,7 +140,7 @@ def tail_log(path, lines=30):
 class QuestDB:
     def __init__(self, tmpdir):
         self.tmpdir = tmpdir
-        if sys.platform == 'win32':
+        if IS_WINDOWS:
             self.java = tmpdir / 'jre' / 'bin' / 'java.exe'
         else:
             self.java = tmpdir / 'jre' / 'bin' / 'java'
@@ -164,6 +166,7 @@ class QuestDB:
         self.configure()
 
     def configure(self):
+        self.host = '127.0.0.1' if IS_WINDOWS else '0.0.0.0'
         if IN_DOCKER:
             self.ilp_port = 9009
             self.pg_port = 8812
@@ -175,11 +178,11 @@ class QuestDB:
             self.http_port = avail_port()
             self.http_min_port = avail_port()
             overrides = {
-                'http.bind.to': f'127.0.0.1:{self.http_port}',
-                'pg.net.bind.to': f'127.0.0.1:{self.pg_port}',
-                'line.tcp.net.bind.to': f'127.0.0.1:{self.ilp_port}',
-                'line.udp.bind.to': f'127.0.0.1:{self.ilp_port}',
-                'http.min.net.bind.to': f'127.0.0.1:{self.http_min_port}',
+                'http.bind.to': f'{self.host}:{self.http_port}',
+                'pg.net.bind.to': f'{self.host}:{self.pg_port}',
+                'line.tcp.net.bind.to': f'{self.host}:{self.ilp_port}',
+                'line.udp.bind.to': f'{self.host}:{self.ilp_port}',
+                'http.min.net.bind.to': f'{self.host}:{self.http_min_port}',
             }
             self.override_conf(overrides)
 
@@ -276,7 +279,7 @@ class JupyterLab:
     def install(self):
         # TODO: Wire-up dynamic ports from QuestDB into `play.ipynb`.
         self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
-            if sys.platform == 'win32' else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
+            if IS_WINDOWS else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
         if os.environ.get('LOCAL_RUN') == '1':
             self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
             self.play_notebook_path = self.notebook_dir / 'play.ipynb'
@@ -303,15 +306,17 @@ class JupyterLab:
 
     def run(self):
         if IN_DOCKER:
-            self.port = avail_port()
-        else:
             self.port = 8888
+        else:
+            self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
         args = [
                 str(self.script),
                 '--port', str(self.port),
-                '--no-browser',
-                'play.ipynb']
+                '--no-browser']
+        if not IS_WINDOWS:
+            args.append('--ip=0.0.0.0')
+        args.append('play.ipynb')
         if IN_DOCKER:
             args.append('--allow-root')
         self.proc = subprocess.Popen(args,
@@ -329,7 +334,7 @@ class JupyterLab:
             raise RuntimeError(f'JupyterLab died during startup. {log}')
         with open(self.log_path, 'r') as log_file:
             for line in log_file:
-                if f'    http://localhost:{self.port}/lab?token=' in line:
+                if ('    http://' in line) and (f':{self.port}/lab?token=' in line):
                     self.url = line.strip()
                     print(f'JupyterLab URL: {self.url}')
                     return True
@@ -380,7 +385,7 @@ def setup_venv(tmpdir):
         [sys.executable, '-m', 'venv', str(venv_dir)],
         check=True)
     pip_path = venv_dir / 'Scripts' / 'pip' \
-        if sys.platform == 'win32' else venv_dir / 'bin' / 'pip'
+        if IS_WINDOWS else venv_dir / 'bin' / 'pip'
     opts = [
         '--upgrade',
         '--no-cache-dir',
@@ -443,12 +448,13 @@ def main(tmpdir):
     install_questdb_fut.result()
     lab = start_jupyter_lab(tmpdir, questdb)
     questdb.run()
+    hostname = lab.url.split('://')[1].split(':')[0]
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * Temporary directory: {tmpdir}')
     print(f' * JupyterLab: {lab.url}.')
-    print(f' * QuestDB:')
-    print(f'    * Web Console / REST API: http://localhost:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h localhost -p {questdb.psql_port} -U admin -d qdb')
+    print(' * QuestDB:')
+    print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
+    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
     if IN_DOCKER:
         print('')
