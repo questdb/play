@@ -16,6 +16,7 @@ import socket
 import time
 import json
 import platform
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -43,7 +44,7 @@ def wait_prompt():
             time.sleep(5)
     except KeyboardInterrupt:
         pass
-    print('Stopping services, deleting temporary files and exiting.')
+    print('\nStopping services, deleting temporary files and exiting.')
 
 
 def avail_port():
@@ -272,14 +273,67 @@ class JupyterLab:
     def run(self):
         self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
-        self.proc = subprocess.Popen(
-            [str(self.script), '--port', str(self.port)],
+        self.proc = subprocess.Popen([
+                str(self.script),
+                '--port', str(self.port),
+                '--no-browser',
+                'play.ipynb'],
             close_fds=True,
             cwd=self.notebook_dir,
             stdout=self.log_file,
             stderr=subprocess.STDOUT)
 
         atexit.register(self.stop)
+
+        # print('Waiting until JupyterLab is up.')
+        # retry(
+        #     self.check_jupyterlab_up,
+        #     timeout_sec=30,
+        #     msg='Timed out waiting for JupyterLab to come up.')
+        # print('JupyterLab is up.')
+
+        self.discover_url()
+
+    def check_jupyterlab_up(self):
+        print('check_jupyterlab_up :: (A)')
+        if self.proc.poll() is not None:
+            raise RuntimeError('JupyterLab died during startup.')
+        req = urllib.request.Request(
+            f'http://localhost:{self.port}/',
+            method='HEAD')
+        try:
+            print('check_jupyterlab_up :: (B)')
+            resp = urllib.request.urlopen(req, timeout=1)
+            print(f'check_jupyterlab_up :: (C) {resp.status}')
+            if resp.status == 200:
+                return True
+        except socket.timeout:
+            print(f'check_jupyterlab_up :: (D)')
+            pass
+        except urllib.error.URLError as url_err:
+            print(f'check_jupyterlab_up :: (E): {url_err}')
+            pass
+        print(f'check_jupyterlab_up :: (F)')
+        return False
+
+    def scan_log_for_url(self):
+        if self.proc.poll() is not None:
+            raise RuntimeError('JupyterLab died during startup.')
+        with open(self.log_path, 'r') as log_file:
+            for line in log_file:
+                if f'    http://localhost:{self.port}/lab?token=' in line:
+                    self.url = line.strip()
+                    print(f'JupyterLab URL: {self.url}')
+                    return True
+        return False
+
+    def discover_url(self):
+        print('Waiting until JupyterLab URL is available.')
+        retry(
+            self.scan_log_for_url,
+            timeout_sec=30,
+            msg='Timed out waiting for JupyterLab URL to become available.')
+        print('JupyterLab URL is available.')
 
     def stop(self):
         # Idempotent.
@@ -336,7 +390,7 @@ def setup_venv(tmpdir):
 
 def check_python_version():
     if sys.version_info < (3, 8):
-        print('Python 3.8 or later is required')
+        print('Python 3.8 or later is required.')
         sys.exit(1)
 
 
@@ -360,6 +414,13 @@ def start_jupyter_lab(tmpdir, questdb):
     return lab
 
 
+def try_open_browser(url):
+    try:
+        webbrowser.open(url)
+    except webbrowser.Error:
+        pass
+
+
 @with_tmpdir
 def main(tmpdir):
     write_readme(tmpdir)
@@ -374,8 +435,12 @@ def main(tmpdir):
     install_questdb_fut.result()
     lab = start_jupyter_lab(tmpdir, questdb)
     questdb.run()
-    time.sleep(3)  # A few seconds for the Web browser to start up.
     print('\n\nQuestDB and JupyterLab are now running...')
+    print(f' * Temporary directory: {tmpdir}')
+    print(f' * JupyterLab: {lab.url}.')
+    print(f' * QuestDB Web Console: http://localhost:{questdb.http_port}/')
+    print('\n')
+    try_open_browser(lab.url)
     wait_prompt()
     lab.stop()
     questdb.stop()
