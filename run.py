@@ -459,7 +459,7 @@ def main(tmpdir):
     print(f' * JupyterLab: {lab.url}')
     print(' * QuestDB:')
     print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb')
+    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb  # password: quest')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
     if IN_DOCKER:
         print('')
