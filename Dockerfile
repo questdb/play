@@ -38,7 +38,7 @@ ENV PATH="$JAVA_HOME/bin:$VIRTUAL_ENV/bin:$PATH"
 # Update system
 RUN apt-get -y update
 RUN apt-get -y upgrade
-RUN apt-get -y --no-install-recommends install syslog-ng ca-certificates git curl wget vim procps gnupg2 lsb-release software-properties-common unzip iputils-ping
+RUN apt-get -y --no-install-recommends install syslog-ng ca-certificates git curl wget vim procps gnupg2 lsb-release software-properties-common unzip less tar gzip iputils-ping
 
 # Install JDK
 RUN wget -O- https://apt.corretto.aws/corretto.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/winehq.gpg >/dev/null && \
@@ -53,8 +53,9 @@ RUN rm -rf /var/lib/apt/lists/*
 RUN ulimit -S unlimited
 RUN ulimit -H unlimited
 
-# Install QuestDB
 WORKDIR /opt
+
+# Install QuestDB
 RUN echo tag_name ${QUESTDB_TAG}
 RUN curl -L -o questdb.tar.gz "https://github.com/questdb/questdb/releases/download/${QUESTDB_TAG}/questdb-${QUESTDB_TAG}-no-jre-bin.tar.gz"
 RUN tar xvfz questdb.tar.gz
@@ -65,6 +66,7 @@ RUN mv "questdb-${QUESTDB_TAG}-no-jre-bin" questdb
 RUN python3 -m venv $VIRTUAL_ENV
 COPY requirements.txt .
 RUN pip install --no-compile --only-binary :all: -r requirements.txt
+RUN /opt/venv/bin/jupyter-lab --generate-config && sed -i -e "s|# c.ServerApp.allow_remote_access = False|# c.ServerApp.allow_remote_access = True|g" /root/.jupyter/jupyter_lab_config.py
 
 # Aliases
 RUN echo "alias l='ls -l'" >> ~/.bashrc
@@ -74,8 +76,9 @@ RUN echo "alias rm='rm -i'" >> ~/.bashrc
 # Run script
 COPY notebooks notebooks
 RUN echo "#!/bin/bash" > /opt/run.sh
-RUN echo "/opt/questdb/questdb.sh start -d /opt/QDB_DATA" >> /opt/run.sh
+RUN echo "/opt/questdb/questdb.sh start -d /opt/qdb_data" >> /opt/run.sh
 RUN echo "/opt/venv/bin/jupyter-lab --allow-root --ip 0.0.0.0 --port 8888 --no-browser --notebook-dir /opt/notebooks/ /opt/notebooks/play.ipynb" >> /opt/run.sh
 RUN chmod 700 /opt/run.sh
+
 CMD ["/bin/bash", "-c", "/opt/run.sh"]
 

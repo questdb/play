@@ -1,11 +1,10 @@
-
 ## Script
 
 **run.py** sets up the environment required to run [QuestDB 6.7](https://github.com/questdb/questdb/releases/tag/6.7/)
-alongside a [Jupyter-lab](https://jupyter.org/try-jupyter/lab/) environment, for the purpose of showcasing QuestDB's 
+alongside a [Jupyter-lab](https://jupyter.org/try-jupyter/lab/) environment, for the purpose of showcasing QuestDB's
 superior data analytics capabilities, when compared to a Pandas DataFrame.
 
-A local ephemeral directory is created to host a Python 3.10 virtual environment, plus Java 11 JRE. 
+A local ephemeral directory is created to host a Python 3.10 virtual environment, plus Java 11 JRE.
 
 ## Docker
 
@@ -25,6 +24,23 @@ docker build -t io.questdb.play:1.0-SNAPSHOT .
     -p 9000:9000 \
     --name questdb-play \
     -it io.questdb.play:1.0-SNAPSHOT [bash]
+```
+
+Mount points:
+
+- **/opt/qdb_data/**:  QuestDB's data root folder.
+- **/opt/notebooks/**: Jupyter notebooks. 
+
+```shell
+  docker run --rm \
+    -p 8888:8888 \
+    -p 8812:8812 \
+    -p 9009:9009 \
+    -p 9000:9000 \
+    --name questdb-play \
+    -v /Users/marregui/QUEST/db:/opt/qdb_data/ \
+    -v /Users/marregui/QUEST/notebooks:/opt/notebooks/ \
+    -it io.questdb.play:1.0-SNAPSHOT
 ```
 
 ### Delete image
