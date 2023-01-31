@@ -33,13 +33,12 @@ ENV ARCHITECTURE=x64
 ENV PYTHONUNBUFFERED 1
 ENV VIRTUAL_ENV=/opt/venv
 ENV JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
-ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$JAVA_HOME/bin:$VIRTUAL_ENV/bin:$PATH"
 
 # Update system
 RUN apt-get -y update
 RUN apt-get -y upgrade
-RUN apt-get -y --no-install-recommends install syslog-ng ca-certificates git curl wget gnupg2 lsb-release software-properties-common unzip iputils-ping
+RUN apt-get -y --no-install-recommends install syslog-ng ca-certificates git curl wget vim procps gnupg2 lsb-release software-properties-common unzip iputils-ping
 
 # Install JDK
 RUN wget -O- https://apt.corretto.aws/corretto.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/winehq.gpg >/dev/null && \
@@ -49,6 +48,10 @@ RUN wget -O- https://apt.corretto.aws/corretto.key | gpg --dearmor | tee /etc/ap
 
 RUN apt-get clean
 RUN rm -rf /var/lib/apt/lists/*
+
+# No limits on resources
+RUN ulimit -S unlimited
+RUN ulimit -H unlimited
 
 # Install QuestDB
 WORKDIR /opt
@@ -64,11 +67,15 @@ COPY requirements.txt .
 RUN pip install --no-compile --only-binary :all: -r requirements.txt
 
 # Aliases
-RUN echo 'alias l="ls -l"' >> ~/.bashrc
-RUN echo 'alias ll="ls -la"' >> ~/.bashrc
-RUN echo 'alias rm="rm -i"' >> ~/.bashrc
+RUN echo "alias l='ls -l'" >> ~/.bashrc
+RUN echo "alias ll='ls -la'" >> ~/.bashrc
+RUN echo "alias rm='rm -i'" >> ~/.bashrc
 
 # Run script
 COPY notebooks notebooks
-COPY run.py .
-CMD ["/opt/venv/bin/python3", "run.py", "IN_DOCKER"]
+RUN echo "#!/bin/bash" > /opt/run.sh
+RUN echo "/opt/questdb/questdb.sh start -d /opt/QDB_DATA" >> /opt/run.sh
+RUN echo "/opt/venv/bin/jupyter-lab --allow-root --ip 0.0.0.0 --port 8888 --no-browser --notebook-dir /opt/notebooks/ /opt/notebooks/play.ipynb" >> /opt/run.sh
+RUN chmod 700 /opt/run.sh
+CMD ["/bin/bash", "-c", "/opt/run.sh"]
+

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import certifi
+import ssl
 import sys
 import subprocess
 import os
@@ -20,7 +22,6 @@ import webbrowser
 import textwrap
 from concurrent.futures import ThreadPoolExecutor
 
-_IN_DOCKER = False
 _PIP_DEPS = [
     'certifi',
     'pillow',
@@ -164,24 +165,18 @@ class QuestDB:
 
     def configure(self):
         (self.questdb_path / 'data' / 'log').mkdir(parents=True)
-        if _IN_DOCKER:
-            self.ilp_port = 9009
-            self.pg_port = 8812
-            self.http_port = 9000
-            self.http_min_port = 9003
-        else:
-            self.ilp_port = avail_port()
-            self.pg_port = avail_port()
-            self.http_port = avail_port()
-            self.http_min_port = avail_port()
-            overrides = {
-                'http.bind.to': f'127.0.0.1:{self.http_port}',
-                'pg.net.bind.to': f'127.0.0.1:{self.pg_port}',
-                'line.tcp.net.bind.to': f'127.0.0.1:{self.ilp_port}',
-                'line.udp.bind.to': f'127.0.0.1:{self.ilp_port}',
-                'http.min.net.bind.to': f'127.0.0.1:{self.http_min_port}',
-            }
-            self.override_conf(overrides)
+        self.ilp_port = avail_port()
+        self.pg_port = avail_port()
+        self.http_port = avail_port()
+        self.http_min_port = avail_port()
+        overrides = {
+            'http.bind.to': f'127.0.0.1:{self.http_port}',
+            'pg.net.bind.to': f'127.0.0.1:{self.pg_port}',
+            'line.tcp.net.bind.to': f'127.0.0.1:{self.ilp_port}',
+            'line.udp.bind.to': f'127.0.0.1:{self.ilp_port}',
+            'http.min.net.bind.to': f'127.0.0.1:{self.http_min_port}',
+        }
+        self.override_conf(overrides)
 
     def override_conf(self, overrides):
         # No conf file extracted from the tarball, so we'll create one.
@@ -277,7 +272,6 @@ class JupyterLab:
         self.play_notebook_path = self.notebook_dir / 'play.ipynb'
         self.log_file = None
         self.proc = None
-        self.host_log_search = 'localhost'
         self.port = None
         self.url = None
 
@@ -303,17 +297,9 @@ class JupyterLab:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
-        if _IN_DOCKER:
-            self.port = 8888
-        else:
-            self.port = avail_port()
+        self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
         command = [str(self.script)]
-        if _IN_DOCKER:
-            command.append('--allow-root')
-            command.append('--ip')
-            command.append('0.0.0.0')
-            self.host_log_search = '127.0.0.1'
         command.append('--port')
         command.append(str(self.port))
         command.append('--no-browser')
@@ -334,11 +320,11 @@ class JupyterLab:
         if self.proc.poll() is not None:
             log = tail_log(self.log_path)
             raise RuntimeError(f'JupyterLab died during startup. {log}')
-        target_log = f'http://{self.host_log_search}:{self.port}/lab?token='
+        target_log = f'http://localhost:{self.port}/lab?token='
         with open(self.log_path, 'r') as log_file:
             for line in log_file:
                 if target_log in line:
-                    self.url = line.strip().replace(self.host_log_search, 'localhost')
+                    self.url = line.strip()
                     print(f'JupyterLab URL: {self.url}')
                     return True
         return False
@@ -458,51 +444,14 @@ def main(tmpdir):
     questdb.stop()
 
 
-def main_in_docker():
-    opt_dir = pathlib.Path('/opt')
-    jupyter_lab_dir = opt_dir / 'venv' / 'bin' / 'jupyter-lab'
-    download_dir = pathlib.Path('download')
-    download_dir.mkdir(parents=True)
-    with ThreadPoolExecutor() as tpe:
-        questdb = QuestDB(
-            opt_dir,
-            java_path=pathlib.Path('/usr/lib/jvm/java-17-amazon-corretto/bin/java'),
-            jar_path=pathlib.Path('/opt/questdb/questdb.jar'))
-        questdb.configure()
-        lab = JupyterLab(opt_dir, jupyter_lab_dir)
-        lab.install()
-        lab.configure(questdb)
-        lab.run()
-    print('\n\nQuestDB and JupyterLab are now running...')
-    print(f' * JupyterLab: {lab.url}')
-    print(f' * QuestDB:')
-    print(f'    * Web Console / REST API: http://localhost:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h localhost -p {questdb.pg_port} -U admin -d qdb')
-    print(f'    * ILP Protocol, port: {questdb.ilp_port}')
-    print('\n')
-    wait_prompt()
-    try:
-        lab.stop()
-        questdb.stop()
-    except KeyboardInterrupt:
-        pass
-
-
 if __name__ == '__main__':
-    _IN_DOCKER = 'IN_DOCKER' in sys.argv
-    if not _IN_DOCKER:
-        # if input(_ASK_PROMPT).lower().strip() not in ('y', ''):
-        #     print('Aborted')
-        #     sys.exit(1)
+    if input(_ASK_PROMPT).lower().strip() not in ('y', ''):
+        print('Aborted')
+        sys.exit(1)
 
-        import certifi
-        import ssl
-
-        _URL_HTTPS_CONTEXT = ssl.create_default_context(cafile=certifi.where())
-        check_python_version()
-        main()
-    else:
-        main_in_docker()
+    _URL_HTTPS_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    check_python_version()
+    main()
     print('\nThanks for trying QuestDB!\n')
     print('Learn more:')
     print(' * https://questdb.io/docs/')
