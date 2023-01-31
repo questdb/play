@@ -1,3 +1,12 @@
+
+## Script
+
+**run.py** sets up the environment required to run [QuestDB 6.7](https://github.com/questdb/questdb/releases/tag/6.7/)
+alongside a [Jupyter-lab](https://jupyter.org/try-jupyter/lab/) environment, for the purpose of showcasing QuestDB's 
+superior data analytics capabilities, when compared to a Pandas DataFrame.
+
+A local ephemeral directory is created to host a Python 3.10 virtual environment, plus Java 11 JRE. 
+
 ## Docker
 
 ### Build image
