@@ -31,9 +31,8 @@ EXPOSE 9009/tcp
 ENV QUESTDB_TAG=6.7
 ENV ARCHITECTURE=x64
 ENV PYTHONUNBUFFERED 1
-ENV VIRTUAL_ENV=/opt/venv
 ENV JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
-ENV PATH="$JAVA_HOME/bin:$VIRTUAL_ENV/bin:$PATH"
+ENV PATH="$JAVA_HOME/bin:${PATH}"
 
 # Update system
 RUN apt-get -y update
@@ -46,12 +45,14 @@ RUN wget -O- https://apt.corretto.aws/corretto.key | gpg --dearmor | tee /etc/ap
     apt-get update && \
     apt-get install -y java-17-amazon-corretto-jdk=1:17.0.3.6-1
 
+# Clean after packages installation
 RUN apt-get clean
 RUN rm -rf /var/lib/apt/lists/*
 
-# No limits on resources
-RUN ulimit -S unlimited
-RUN ulimit -H unlimited
+# Aliases
+RUN echo "alias l='ls -l'" >> ~/.bashrc
+RUN echo "alias ll='ls -la'" >> ~/.bashrc
+RUN echo "alias rm='rm -i'" >> ~/.bashrc
 
 WORKDIR /opt
 
@@ -62,23 +63,31 @@ RUN tar xvfz questdb.tar.gz
 RUN rm questdb.tar.gz
 RUN mv "questdb-${QUESTDB_TAG}-no-jre-bin" questdb
 
-# Virtual env
-RUN python3 -m venv $VIRTUAL_ENV
+# Configure QuestDB
+RUN ulimit -S unlimited
+RUN ulimit -H unlimited
+RUN mkdir csv
+RUN mkdir tmp
+RUN mkdir backups
+RUN mkdir questdb/db
+RUN mkdir questdb/conf
+RUN echo "config.validation.strict=true" > questdb/conf/server.conf
+RUN echo "query.timeout.sec=120" >> questdb/conf/server.conf
+RUN echo "cairo.sql.copy.root=/opt/csv" >> questdb/conf/server.conf
+RUN echo "cairo.sql.copy.work.root=/opt/tmp" >> questdb/conf/server.conf
+RUN echo "cairo.sql.backup.root=/opt/backups" >> questdb/conf/server.conf
+
+# Install requirements.txt
 COPY requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-compile --only-binary :all: -r requirements.txt
-RUN /opt/venv/bin/jupyter-lab --generate-config && sed -i -e "s|# c.ServerApp.allow_remote_access = False|# c.ServerApp.allow_remote_access = True|g" /root/.jupyter/jupyter_lab_config.py
+RUN jupyter-lab --generate-config && sed -i -e "s|# c.ServerApp.allow_remote_access = False|# c.ServerApp.allow_remote_access = True|g" /root/.jupyter/jupyter_lab_config.py
 
-# Aliases
-RUN echo "alias l='ls -l'" >> ~/.bashrc
-RUN echo "alias ll='ls -la'" >> ~/.bashrc
-RUN echo "alias rm='rm -i'" >> ~/.bashrc
+# Create run.sh script
+RUN echo "#!/bin/bash" > run.sh
+RUN echo "/opt/questdb/questdb.sh start -d /opt/questdb" >> run.sh
+RUN echo "jupyter-lab --allow-root --ip 0.0.0.0 --port 8888 --no-browser --notebook-dir /opt/notebooks /opt/notebooks/play.ipynb" >> run.sh
+RUN chmod 700 run.sh
 
-# Run script
 COPY notebooks notebooks
-RUN echo "#!/bin/bash" > /opt/run.sh
-RUN echo "/opt/questdb/questdb.sh start -d /opt/qdb_data" >> /opt/run.sh
-RUN echo "/opt/venv/bin/jupyter-lab --allow-root --ip 0.0.0.0 --port 8888 --no-browser --notebook-dir /opt/notebooks/ /opt/notebooks/play.ipynb" >> /opt/run.sh
-RUN chmod 700 /opt/run.sh
-
 CMD ["/bin/bash", "-c", "/opt/run.sh"]
-

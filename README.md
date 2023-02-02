@@ -28,8 +28,13 @@ docker build -t io.questdb.play:1.0-SNAPSHOT .
 
 Mount points:
 
-- **/opt/qdb_data/**:  QuestDB's data root folder.
-- **/opt/notebooks/**: Jupyter notebooks. 
+- **/opt/questdb/**:  QuestDB's root directory.
+- **/opt/questdb/db/**:  QuestDB's data root directory.
+- **/opt/backups/**: Directory for backups.
+- **/opt/csv/**: Directory for backups.
+- **/opt/volume0/**: Additional volume for create table, alias volume0.
+- **/opt/volume1/**: Additional volume for create table, alias volume1.
+- **/opt/notebooks/**: Jupyter notebooks.
 
 ```shell
   docker run --rm \
@@ -38,8 +43,12 @@ Mount points:
     -p 9009:9009 \
     -p 9000:9000 \
     --name questdb-play \
-    -v /Users/marregui/QUEST/db:/opt/qdb_data/ \
-    -v /Users/marregui/QUEST/notebooks:/opt/notebooks/ \
+    -v /Users/marregui/QUEST/db:/opt/questdb/db \
+    -v /Users/marregui/QUEST/notebooks:/opt/notebooks \
+    -v /Users/marregui/QUEST/backups:/opt/backups \
+    -v /Users/marregui/QUEST/csv:/opt/csv \
+    -v /Users/marregui/OTHER/volume0:/opt/volume0 \
+    -v /Users/marregui/OTHER/volume1:/opt/volume1 \
     -it io.questdb.play:1.0-SNAPSHOT
 ```
 
