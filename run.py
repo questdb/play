@@ -456,7 +456,8 @@ def try_open_browser(url):
 
 @with_tmpdir
 def main(tmpdir):
-    write_readme(tmpdir)
+    if os.environ.get('LOCAL_RUN') != '1':
+        write_readme(tmpdir)
     download_dir = tmpdir / 'download'
     download_dir.mkdir()
     tpe = ThreadPoolExecutor()
