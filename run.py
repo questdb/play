@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+sys.dont_write_bytecode = True
 import subprocess
 import os
 import tempfile
@@ -290,6 +291,9 @@ class JupyterLab:
             download(
                 'https://dl.questdb.io/play/notebooks/play.ipynb',
                 self.play_notebook_path)
+            download(
+                'https://dl.questdb.io/play/notebooks/energy.parquet.gzip',
+                self.notebook_dir / 'energy.parquet.gzip')
 
     def configure(self, questdb):
         with self.play_notebook_path.open('r') as play_file:

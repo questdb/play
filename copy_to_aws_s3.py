@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+sys.dont_write_bytecode = True
 import os
 import subprocess
 import argparse
@@ -17,7 +18,8 @@ PATHS = [
     'jre/darwin-arm64.tar.gz',
     'jre/darwin-x86_64.tar.gz',
     'run.py',
-    'notebooks/play.ipynb']
+    'notebooks/play.ipynb',
+    'notebooks/energy.parquet.gzip',]
 
 
 def upload(paths):
