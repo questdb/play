@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+sys.dont_write_bytecode = True
 import subprocess
 import os
 import tempfile
@@ -21,7 +22,6 @@ import textwrap
 from concurrent.futures import ThreadPoolExecutor
 
 _PIP_DEPS = [
-    'certifi',
     'pillow',
     'pyarrow',
     'numpy',
@@ -46,6 +46,16 @@ def wait_prompt():
     except KeyboardInterrupt:
         pass
     print('\nStopping services, deleting temporary files and exiting.')
+
+
+def running_in_docker():
+    return pathlib.Path('/.dockerenv').exists()
+
+
+IN_DOCKER = running_in_docker()
+
+
+IS_WINDOWS = sys.platform == 'win32'
 
 
 def avail_port():
@@ -95,15 +105,14 @@ def first_dir(path):
 def install_java(tmpdir):
     print('Downloading and installing Java 11.')
     platform_id = f'{sys.platform}-{platform.machine()}'
-    is_windows = sys.platform == 'win32'
-    fname = f'{platform_id}.zip' if is_windows else f'{platform_id}.tar.gz'
+    fname = f'{platform_id}.zip' if IS_WINDOWS else f'{platform_id}.tar.gz'
     url = f'https://dl.questdb.io/play/jre/{fname}'
     download_dir = tmpdir / 'download'
     extraction_dir = tmpdir / 'download' / 'jre'
     extraction_dir.mkdir()
     archive_path = download_dir / fname
     download(url, archive_path)
-    if is_windows:
+    if IS_WINDOWS:
         with zipfile.ZipFile(archive_path) as zip:
             zip.extractall(extraction_dir)
     else:
@@ -131,15 +140,14 @@ def tail_log(path, lines=30):
 class QuestDB:
     def __init__(self, tmpdir, java_path=None, jar_path=None):
         self.tmpdir = tmpdir
-        if sys.platform == 'win32':
-            self.java = tmpdir / 'jre' / 'bin' / 'java.exe'
-        else:
-            if java_path is None:
-                self.java = tmpdir / 'jre' / 'bin' / 'java'
+        if not java_path:
+            if IS_WINDOWS:
+                java_path = tmpdir / 'jre' / 'bin' / 'java.exe'
             else:
-                self.java = java_path
+                java_path = tmpdir / 'jre' / 'bin' / 'java'
+        self.java = java_path
         self.questdb_path = tmpdir / 'questdb'
-        self.jar_path = self.questdb_path / 'bin' / 'questdb.jar' if jar_path is None else jar_path
+        self.jar_path = jar_path or self.questdb_path / 'bin' / 'questdb.jar'
         self.data_path = self.questdb_path / 'data'
         self.log_path = self.data_path / 'log' / 'questdb.log'
         self.proc = None
@@ -148,8 +156,6 @@ class QuestDB:
     def install(self):
         print(f'Downloading QuestDB v.{_QUESTDB_VERSION} from {_QUESTDB_URL!r}.')
         download_dir = self.tmpdir / 'download'
-        if not download_dir.is_dir():
-            download_dir.mkdir()
         archive_path = download_dir / 'questdb.tar.gz'
         download(_QUESTDB_URL, archive_path)
         print(f'Extracting QuestDB v.{_QUESTDB_VERSION} to {download_dir!r}.')
@@ -162,18 +168,24 @@ class QuestDB:
 
     def configure(self):
         (self.questdb_path / 'data' / 'log').mkdir(parents=True)
-        self.ilp_port = avail_port()
-        self.pg_port = avail_port()
-        self.http_port = avail_port()
-        self.http_min_port = avail_port()
-        overrides = {
-            'http.bind.to': f'127.0.0.1:{self.http_port}',
-            'pg.net.bind.to': f'127.0.0.1:{self.pg_port}',
-            'line.tcp.net.bind.to': f'127.0.0.1:{self.ilp_port}',
-            'line.udp.bind.to': f'127.0.0.1:{self.ilp_port}',
-            'http.min.net.bind.to': f'127.0.0.1:{self.http_min_port}',
-        }
-        self.override_conf(overrides)
+        if IN_DOCKER:
+            self.ilp_port = 9009
+            self.pg_port = 8812
+            self.http_port = 9000
+            self.http_min_port = 9003
+        else:
+            self.ilp_port = avail_port()
+            self.pg_port = avail_port()
+            self.http_port = avail_port()
+            self.http_min_port = avail_port()
+            overrides = {
+                'http.bind.to': f'{self.host}:{self.http_port}',
+                'pg.net.bind.to': f'{self.host}:{self.pg_port}',
+                'line.tcp.net.bind.to': f'{self.host}:{self.ilp_port}',
+                'http.min.net.bind.to': f'{self.host}:{self.http_min_port}',
+                'line.udp.enabled': 'false',
+            }
+            self.override_conf(overrides)
 
     def override_conf(self, overrides):
         # No conf file extracted from the tarball, so we'll create one.
@@ -277,9 +289,16 @@ class JupyterLab:
         if os.environ.get('LOCAL_RUN') == '1':
             self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
         else:
-            if not self.notebook_dir.is_dir():
+            self.notebook_dir = self.tmpdir / 'notebooks'
+            if not self.notebook_dir.exists():
                 self.notebook_dir.mkdir()
-            download('https://dl.questdb.io/play/notebooks/play.ipynb', self.play_notebook_path)
+            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
+            download(
+                'https://dl.questdb.io/play/notebooks/play.ipynb',
+                self.play_notebook_path)
+            download(
+                'https://dl.questdb.io/play/notebooks/energy.parquet.gzip',
+                self.notebook_dir / 'energy.parquet.gzip')
 
     def configure(self, questdb):
         with self.play_notebook_path.open('r') as play_file:
@@ -412,7 +431,8 @@ def try_open_browser(url):
 
 @with_tmpdir
 def main(tmpdir):
-    write_readme()
+    if os.environ.get('LOCAL_RUN') != '1':
+        write_readme(tmpdir)
     download_dir = tmpdir / 'download'
     download_dir.mkdir()
     tpe = ThreadPoolExecutor()

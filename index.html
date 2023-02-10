@@ -75,14 +75,15 @@
             left: 50%;
             margin-right: -50%;
             padding: 4em;
-            transform: translate(-50%, -50%)
+            transform: translate(-50%, -50%);
+            text-align: center;
         }
 
-        #run-me {
+        .run-me {
             cursor: help;
         }
 
-        #run-me::before {
+        .run-me::before {
             content: "$ ";
             color: #666;
         }
@@ -128,8 +129,8 @@
         }
     </style>
     <script>
-        function copyToClipboard() {
-            let runMe = document.getElementById("run-me");
+        function copyToClipboard(runMeId) {
+            let runMe = document.getElementById(runMeId);
             let copyBuf = document.getElementById("copy-buf");
             let cmd = runMe.innerText;
             copyBuf.textContent = cmd;
@@ -147,9 +148,15 @@
         <p id="logo">
             <img alt="QuestDB" src="https://play.questdb.io/questdb-logo.svg" width="305px"/>
         </p>
-        <pre><code
-            onclick="copyToClipboard()"
-            id="run-me">python3 -c "import urllib.request as w;s=w.urlopen('https://dl.questdb.io/play/run.py').read().decode();exec(s)"</code></pre>
+        <p><code
+            onclick="copyToClipboard('run-me-py')"
+            class="run-me"
+            id="run-me-py">python3 -c "import urllib.request as w;exec(w.urlopen('https://dl.questdb.io/play/run.py').read())"</code></p>
+        <p><em>or</em></p>
+        <p><code
+            onclick="copyToClipboard('run-me-docker')"
+            class="run-me"
+            id="run-me-docker">docker run -it questdb/play # STILL IN THE WORKS</code></p>
         <p id="copied" class="glow">Copied. Paste in terminal.</p>
     </section>
     <textarea id="copy-buf"></textarea>
