@@ -23,7 +23,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 _PIP_DEPS = [
-    'pillow',
     'pyarrow',
     'numpy',
     'pandas',
@@ -47,7 +46,6 @@ def wait_prompt():
             time.sleep(5)
     except KeyboardInterrupt:
         pass
-    print('\nStopping services, deleting temporary files and exiting.')
 
 
 def running_in_docker():
@@ -140,16 +138,17 @@ def tail_log(path, lines=30):
 
 
 class QuestDB:
-    def __init__(self, tmpdir):
+    def __init__(self, tmpdir=None, java_path=None, questdb_path=None):
         self.tmpdir = tmpdir
-        if IS_WINDOWS:
-            self.java = tmpdir / 'jre' / 'bin' / 'java.exe'
-        else:
-            self.java = tmpdir / 'jre' / 'bin' / 'java'
-        self.questdb_path = tmpdir / 'questdb'
-        self.jar_path = self.questdb_path / 'bin' / 'questdb.jar'
-        self.data_path = self.questdb_path / 'data'
-        self.log_path = self.data_path / 'log' / 'questdb.log'
+        self.java_path = java_path
+        if self.java_path is None:
+            if IS_WINDOWS:
+                self.java_path = tmpdir / 'jre' / 'bin' / 'java.exe'
+            else:
+                self.java_path = tmpdir / 'jre' / 'bin' / 'java'
+        self.questdb_path = questdb_path or (tmpdir / 'questdb')
+        self.jar_path = self.questdb_path / 'questdb.jar'
+        self.log_path = self.questdb_path / 'log' / 'questdb.log'
         self.proc = None
         self.log_file = None
 
@@ -161,13 +160,12 @@ class QuestDB:
         print(f'Extracting QuestDB v.{_QUESTDB_VERSION} to {download_dir!r}.')
         with tarfile.open(archive_path) as tar:
             tar.extractall(self.questdb_path)
-        questdb_bin_path = self.questdb_path / 'bin'
         # Rename "questdb-6.7-no-jre-bin" or similar to "bin"
-        next(self.questdb_path.glob("**/questdb.jar")).parent.rename(questdb_bin_path)
-        (self.questdb_path / 'data' / 'log').mkdir(parents=True)
+        next(self.questdb_path.glob("**/questdb.jar")).rename(self.jar_path)
         self.configure()
 
     def configure(self):
+        self.log_path.parent.mkdir()
         self.host = '127.0.0.1' if IS_WINDOWS else '0.0.0.0'
         if IN_DOCKER:
             self.ilp_port = 9009
@@ -194,7 +192,7 @@ class QuestDB:
         with zipfile.ZipFile(self.jar_path) as zip:
             conf_lines = zip.read('io/questdb/site/conf/server.conf')
             conf_lines = conf_lines.decode('utf-8').splitlines()
-        conf_path = self.questdb_path / 'data' / 'conf' / 'server.conf'
+        conf_path = self.questdb_path / 'conf' / 'server.conf'
         conf_path.parent.mkdir(parents=True)
         with conf_path.open('w', encoding='utf-8') as conf:
             for line in conf_lines:
@@ -208,7 +206,7 @@ class QuestDB:
 
     def run(self):
         launch_args = [
-            self.java,
+            str(self.java_path),
             '-DQuestDB-Runtime-0',
             '-Xms3g',
             '-Xmx3g',
@@ -220,26 +218,24 @@ class QuestDB:
             '-XX:+UnlockExperimentalVMOptions',
             '-p', str(self.jar_path),
             '-m', 'io.questdb/io.questdb.ServerMain',
-            '-d', str(self.data_path)]
+            '-d', str(self.questdb_path)]
         sys.stderr.write(
-            f'Starting QuestDB: {launch_args!r}\n')
+            f'Starting QuestDB.\n')
         self.log_file = open(self.log_path, 'ab')
         self.proc = subprocess.Popen(
             launch_args,
             close_fds=True,
-            cwd=self.data_path,
+            cwd=self.questdb_path,
             # env=launch_env,
             stdout=self.log_file,
             stderr=subprocess.STDOUT)
 
         atexit.register(self.stop)
 
-        print('Waiting until QuestDB HTTP service is up.')
         retry(
             self.check_http_up,
             timeout_sec=60,
             msg='Timed out waiting for HTTP service to come up.')
-        print('QuestDB is up.')
 
     def check_http_up(self):
         if self.proc.poll() is not None:
@@ -270,27 +266,28 @@ class QuestDB:
 
 
 class JupyterLab:
-    def __init__(self, tmpdir):
+    def __init__(self, tmpdir=None, script_path=None, notebook_dir=None, log_path=None):
         self.tmpdir = tmpdir
-        self.notebook_dir = None
-        self.script = None
-        self.log_path = self.tmpdir / 'jupyterlab.log'
+        self.script_path = script_path
+        if self.script_path is None:
+            self.script_path = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
+                if IS_WINDOWS else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
+        self.notebook_dir = notebook_dir
+        if self.notebook_dir is None:
+            if os.environ.get('LOCAL_RUN') == '1':
+                self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
+                self.play_notebook_path = self.notebook_dir / 'play.ipynb'
+            else:
+                self.notebook_dir = self.tmpdir / 'notebooks'
+        self.play_notebook_path = self.notebook_dir / 'play.ipynb'
+        self.log_path = log_path or (self.tmpdir / 'jupyterlab.log')
         self.log_file = None
         self.proc = None
-        self.play_notebook_path = None
         self.port = None
 
     def install(self):
-        # TODO: Wire-up dynamic ports from QuestDB into `play.ipynb`.
-        self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
-            if IS_WINDOWS else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
-        if os.environ.get('LOCAL_RUN') == '1':
-            self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
-            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
-        else:
-            self.notebook_dir = self.tmpdir / 'notebooks'
+        if not self.notebook_dir.exists():
             self.notebook_dir.mkdir()
-            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
             download(
                 'https://dl.questdb.io/play/notebooks/play.ipynb',
                 self.play_notebook_path)
@@ -312,13 +309,15 @@ class JupyterLab:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
+        sys.stderr.write(
+            f'Starting JupyterLab.\n')
         if IN_DOCKER:
             self.port = 8888
         else:
             self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
         args = [
-                str(self.script),
+                str(self.script_path),
                 '--port', str(self.port),
                 '--no-browser']
         if not IS_WINDOWS:
@@ -346,17 +345,14 @@ class JupyterLab:
                     self.hostname = self.url.split('://')[1].split(':')[0]
                     self.token = self.url.split('token=')[1]
                     self.url = f'http://{self.hostname}:{self.port}/lab/tree/play.ipynb?token={self.token}'
-                    print(f'JupyterLab URL: {self.url}')
                     return True
         return False
 
     def discover_url(self):
-        print('Waiting until JupyterLab URL is available.')
         retry(
             self.scan_log_for_url,
             timeout_sec=30,
             msg='Timed out waiting for JupyterLab URL to become available.')
-        print('JupyterLab URL is available.')
 
     def stop(self):
         # Idempotent.
@@ -490,8 +486,18 @@ def main(tmpdir):
     print('\n')
     try_open_browser(lab.url)
     wait_prompt()
+    print('\nStopping services, deleting temporary files and exiting.')
     lab.stop()
     questdb.stop()
+
+
+def print_exit_message():
+    print('\nThanks for trying QuestDB!\n')
+    print('Learn more:')
+    print(' * https://questdb.io/docs/')
+    print(' * https://questdb.io/cloud/')
+    print(' * https://slack.questdb.io/')
+    print('')
 
 
 if __name__ == '__main__':
@@ -500,9 +506,5 @@ if __name__ == '__main__':
         print('Aborted')
         sys.exit(1)
     main()
-    print('\nThanks for trying QuestDB!\n')
-    print('Learn more:')
-    print(' * https://questdb.io/docs/')
-    print(' * https://questdb.io/cloud/')
-    print(' * https://slack.questdb.io/')
-    print('')
+    print_exit_message()
+

@@ -83,11 +83,8 @@ RUN pip install --upgrade pip
 RUN pip install --no-compile --only-binary :all: -r requirements.txt
 RUN jupyter-lab --generate-config && sed -i -e "s|# c.ServerApp.allow_remote_access = False|# c.ServerApp.allow_remote_access = True|g" /root/.jupyter/jupyter_lab_config.py
 
-# Create run.sh script
-RUN echo "#!/bin/bash" > run.sh
-RUN echo "/opt/questdb/questdb.sh start -d /opt/questdb" >> run.sh
-RUN echo "jupyter-lab --allow-root --ip 0.0.0.0 --port 8888 --no-browser --notebook-dir /opt/notebooks /opt/notebooks/play.ipynb" >> run.sh
-RUN chmod 700 run.sh
-
 COPY notebooks notebooks
-CMD ["/bin/bash", "-c", "/opt/run.sh"]
+COPY run.py run.py
+COPY docker_run.py docker_run.py
+RUN chmod +x docker_run.py
+CMD ["/opt/docker_run.py"]
