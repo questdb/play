@@ -23,7 +23,7 @@ LOCAL_RUN=1 python3 run.py
 ### Build image
 
 ```shell
-docker build -t questdb/questdb-play:1.0.0-SNAPSHOT .
+docker build -t questdb/play:1.0.0-SNAPSHOT .
 ```
 
 ### Run Container
@@ -34,8 +34,8 @@ docker build -t questdb/questdb-play:1.0.0-SNAPSHOT .
     -p 8812:8812 \
     -p 9009:9009 \
     -p 9000:9000 \
-    --name questdb-play \
-    -it questdb/questdb-play:1.0.0-SNAPSHOT
+    --name play \
+    -it questdb/play:1.0.0-SNAPSHOT
 ```
 
 To enter a terminal from within the image, append `bash` to the command above.
@@ -43,7 +43,7 @@ To enter a terminal from within the image, append `bash` to the command above.
 ### Upload Image to Docker Hub
 
 ```shell
-docker push questdb/questdb-play:1.0.0-SNAPSHOT
+docker push questdb/play:1.0.0-SNAPSHOT
 ```
 
 ### Mount points
@@ -63,19 +63,19 @@ docker push questdb/questdb-play:1.0.0-SNAPSHOT
     -p 8812:8812 \
     -p 9009:9009 \
     -p 9000:9000 \
-    --name questdb-play \
+    --name play \
     -v /Users/marregui/QUEST/db:/opt/questdb/db \
     -v /Users/marregui/QUEST/notebooks:/opt/notebooks \
     -v /Users/marregui/QUEST/backups:/opt/backups \
     -v /Users/marregui/QUEST/csv:/opt/csv \
     -v /Users/marregui/OTHER/volume0:/opt/volume0 \
     -v /Users/marregui/OTHER/volume1:/opt/volume1 \
-    -it questdb/questdb-play:1.0-SNAPSHOT
+    -it questdb/play:1.0-SNAPSHOT
 ```
 
 ### Delete image
 
 ```shell
-docker rmi -f questdb/questdb-play:1.0-SNAPSHOT
+docker rmi -f questdb/play:1.0-SNAPSHOT
 docker rmi -f $(docker images -a | grep none | sed 's/  */|/g' | cut -f 3 -d'|')
 ```
