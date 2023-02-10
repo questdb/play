@@ -30,7 +30,8 @@ _PIP_DEPS = [
     'matplotlib',
     'jupyterlab',
     'requests',
-    'psycopg[binary]']
+    'psycopg[binary]',
+    'seaborn']
 
 
 _QUESTDB_VERSION = '6.7'
@@ -300,7 +301,7 @@ class JupyterLab:
             play = json.load(play_file)
 
             # Patch up the contents of the second cell.
-            play['cells'][2]['source'] = [
+            play['cells'][3]['source'] = [
                 '# This demo relies on dynamic network ports for the core endpoints.\n',
                 f'http_port = {questdb.http_port}  # Web Console and REST API\n',
                 f'ilp_port = {questdb.ilp_port}  # Fast data ingestion port \n',
