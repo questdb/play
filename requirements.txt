@@ -6,3 +6,4 @@ matplotlib
 jupyterlab
 requests
 psycopg[binary]
+seaborn

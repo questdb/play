@@ -6,12 +6,24 @@ when used in conjunction with Pandas, Jupyter, matplotlib, and other libraries.
 
 A local ephemeral directory is created to host a Python virtual environment, plus Java 11 JRE.
 
+To run locally:
+
+```shell
+python3 run.py
+```
+
+To run the script and edit/use the notebook from the repo's directory (to make changes to the notebook):
+
+```shell
+LOCAL_RUN=1 python3 run.py
+```
+
 ## Docker
 
 ### Build image
 
 ```shell
-docker build -t amunra666/questdb-play:1.0.0-pre1 .
+docker build -t questdb/questdb-play:1.0.0-SNAPSHOT .
 ```
 
 ### Run Container
@@ -23,7 +35,7 @@ docker build -t amunra666/questdb-play:1.0.0-pre1 .
     -p 9009:9009 \
     -p 9000:9000 \
     --name questdb-play \
-    -it amunra666/questdb-play:1.0.0-pre1
+    -it questdb/questdb-play:1.0.0-SNAPSHOT
 ```
 
 To enter a terminal from within the image, append `bash` to the command above.
@@ -31,7 +43,7 @@ To enter a terminal from within the image, append `bash` to the command above.
 ### Upload Image to Docker Hub
 
 ```shell
-docker push amunra666/questdb-play:1.0.0-pre1
+docker push questdb/questdb-play:1.0.0-SNAPSHOT
 ```
 
 ### Mount points
@@ -58,26 +70,12 @@ docker push amunra666/questdb-play:1.0.0-pre1
     -v /Users/marregui/QUEST/csv:/opt/csv \
     -v /Users/marregui/OTHER/volume0:/opt/volume0 \
     -v /Users/marregui/OTHER/volume1:/opt/volume1 \
-    -it io.questdb.play:1.0-SNAPSHOT
+    -it questdb/questdb-play:1.0-SNAPSHOT
 ```
 
 ### Delete image
 
 ```shell
-docker rmi -f io.questdb.play:1.0-SNAPSHOT
+docker rmi -f questdb/questdb-play:1.0-SNAPSHOT
 docker rmi -f $(docker images -a | grep none | sed 's/  */|/g' | cut -f 3 -d'|')
-```
-
-## Notes
-
-To test the _index.html_ command locally:
-
-```shell
-python3 -c "exec(open('run.py', 'r').read())"
-```
-
-should be equivalent to:
-
-```shell
-python3 -c "import urllib.request as w;s=w.urlopen('https://dl.questdb.io/play/run.py').read().decode();exec(s)
 ```
