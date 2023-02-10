@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
+import pandas as pd
 import sys
 sys.dont_write_bytecode = True
-import pandas as pd
 
 
 def main():

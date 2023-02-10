@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import run
-import pathlib
+from pathlib import Path
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -8,13 +8,13 @@ from concurrent.futures import ThreadPoolExecutor
 def main():
     tpe = ThreadPoolExecutor()
     questdb = run.QuestDB(
-        java_path=pathlib.Path('/usr/lib/jvm/java-17-amazon-corretto/bin/java'),
-        questdb_path=pathlib.Path('/opt/questdb'))
+        java_path=Path('/usr/lib/jvm/java-17-amazon-corretto/bin/java'),
+        questdb_path=Path('/opt/questdb'))
     questdb.configure()
     lab = run.JupyterLab(
-        script_path=pathlib.Path('/usr/local/bin/jupyter-lab'),
-        notebook_dir=pathlib.Path('/opt/notebooks'),
-        log_path=pathlib.Path('/opt/jupyterlab.log'))
+        script_path=Path('/usr/local/bin/jupyter-lab'),
+        notebook_dir=Path('/opt/notebooks'),
+        log_path=Path('/opt/jupyterlab.log'))
     lab.configure(questdb)
     questdb_run_fut = tpe.submit(questdb.run)
     lab_run_fut = tpe.submit(lab.run)
@@ -25,8 +25,12 @@ def main():
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * JupyterLab: {lab.url}')
     print(' * QuestDB:')
-    print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb  # password: quest')
+    print(
+        f'    * Web Console / REST API: http://{hostname}:' +
+        f'{questdb.http_port}/')
+    print(
+        f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} ' +
+        '-U admin -d qdb  # password: quest')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
     print()
     print('>>>>> CLICK THE FIRST LINK ABOVE TO OPEN JUPYTERLAB <<<<<')
@@ -34,7 +38,7 @@ def main():
 
     run.wait_prompt()
     run.print_exit_message()
-    
+
 
 if __name__ == '__main__':
     main()

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import sys
-sys.dont_write_bytecode = True
+import argparse
 import os
 import subprocess
-import argparse
+import sys
+
+sys.dont_write_bytecode = True
 
 
-AWS_PROFILE='sso-main'
+AWS_PROFILE = 'sso-main'
 
 
 PATHS = [
@@ -35,7 +36,7 @@ def upload(paths):
         if ran.returncode != 0:
             print('')
             print(f'Failed to upload {path}')
-            print(f'If this was due to an expired token, run:')
+            print('If this was due to an expired token, run:')
             print(f'    aws sso login --profile {AWS_PROFILE}')
             sys.exit(1)
         print('')

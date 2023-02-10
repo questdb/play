@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 
-import sys
-sys.dont_write_bytecode = True
-import subprocess
-import os
-import tempfile
-import shutil
-import pathlib
-import tarfile
-import zipfile
-import urllib.request
-import urllib.parse
-import urllib.error
-import atexit
-import socket
-import time
-import json
-import platform
-import webbrowser
-import textwrap
 from concurrent.futures import ThreadPoolExecutor
+import textwrap
+import webbrowser
+import platform
+import json
+import time
+import socket
+import atexit
+import urllib.error
+import urllib.parse
+import urllib.request
+import zipfile
+import tarfile
+import pathlib
+import shutil
+import tempfile
+import os
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
 
 
 _PIP_DEPS = [
@@ -69,12 +70,12 @@ def avail_port():
 
 
 def retry(
-    predicate_task,
-    timeout_sec=30,
-    every=0.05,
-    msg='Timed out retrying',
-    backoff_till=5.0,
-    lead_sleep=0.1):
+        predicate_task,
+        timeout_sec=30,
+        every=0.05,
+        msg='Timed out retrying',
+        backoff_till=5.0,
+        lead_sleep=0.1):
     """
     Repeat task every `interval` until it returns a truthy value or times out.
     """
@@ -133,7 +134,7 @@ def tail_log(path, lines=30):
         log = ''.join(log)
         log = textwrap.indent(log, '    ')
         log = f'Tail of log:\n{log}'
-    except:
+    except Exception:
         pass
     return log
 
@@ -154,7 +155,8 @@ class QuestDB:
         self.log_file = None
 
     def install(self):
-        print(f'Downloading QuestDB v.{_QUESTDB_VERSION} from {_QUESTDB_URL!r}.')
+        print(
+            f'Downloading QuestDB v.{_QUESTDB_VERSION} from {_QUESTDB_URL!r}.')
         download_dir = self.tmpdir / 'download'
         archive_path = download_dir / 'questdb.tar.gz'
         download(_QUESTDB_URL, archive_path)
@@ -220,8 +222,7 @@ class QuestDB:
             '-p', str(self.jar_path),
             '-m', 'io.questdb/io.questdb.ServerMain',
             '-d', str(self.questdb_path)]
-        sys.stderr.write(
-            f'Starting QuestDB.\n')
+        sys.stderr.write('Starting QuestDB.\n')
         self.log_file = open(self.log_path, 'ab')
         self.proc = subprocess.Popen(
             launch_args,
@@ -310,23 +311,23 @@ class JupyterLab:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
-        sys.stderr.write(
-            f'Starting JupyterLab.\n')
+        sys.stderr.write('Starting JupyterLab.\n')
         if IN_DOCKER:
             self.port = 8888
         else:
             self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
         args = [
-                str(self.script_path),
-                '--port', str(self.port),
-                '--no-browser']
+            str(self.script_path),
+            '--port', str(self.port),
+            '--no-browser']
         if not IS_WINDOWS:
             args.append('--ip=0.0.0.0')
         args.append('play.ipynb')
         if IN_DOCKER:
             args.append('--allow-root')
-        self.proc = subprocess.Popen(args,
+        self.proc = subprocess.Popen(
+            args,
             close_fds=True,
             cwd=self.notebook_dir,
             stdout=self.log_file,
@@ -476,12 +477,18 @@ def main(tmpdir):
     print(f' * Temporary directory: {tmpdir}')
     print(f' * JupyterLab: {lab.url}')
     print(' * QuestDB:')
-    print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb  # password: quest')
+    print(
+        f'    * Web Console / REST API: http://{hostname}:' +
+        f'{questdb.http_port}/')
+    print(
+        f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} ' +
+        '-U admin -d qdb  # password: quest')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
     if IN_DOCKER:
         print('')
-        print('It also looks like you are running this script in a Docker container.')
+        print(
+            'It also looks like you are running this script ' +
+            'in a Docker container.')
         print('You may need to forward ports to your host machine:')
         print('   -p 8888:8888 -p 9000:9000 -p 8812:8812 -p 9009:9009')
     print('\n')
@@ -508,4 +515,3 @@ if __name__ == '__main__':
         sys.exit(1)
     main()
     print_exit_message()
-
