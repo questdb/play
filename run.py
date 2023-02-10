@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import certifi
-import ssl
 import sys
 import subprocess
 import os
@@ -38,7 +36,6 @@ _QUESTDB_VERSION = '6.7'
 _QUESTDB_URL = (
         f'https://github.com/questdb/questdb/releases/download/{_QUESTDB_VERSION}' +
         f'/questdb-{_QUESTDB_VERSION}-no-jre-bin.tar.gz')
-_URL_HTTPS_CONTEXT = None
 
 
 def wait_prompt():
@@ -87,7 +84,7 @@ def ping_retry(
 
 
 def download(url, dest_path):
-    with urllib.request.urlopen(url, context=_URL_HTTPS_CONTEXT) as resp, open(dest_path, 'wb') as dest:
+    with urllib.request.urlopen(url) as resp, open(dest_path, 'wb') as dest:
         shutil.copyfileobj(resp, dest)
 
 
@@ -239,7 +236,7 @@ class QuestDB:
             f'http://localhost:{self.http_port}/',
             method='HEAD')
         try:
-            resp = urllib.request.urlopen(req, context=_URL_HTTPS_CONTEXT, timeout=1)
+            resp = urllib.request.urlopen(req, timeout=1)
             if resp.status == 200:
                 return True
         except socket.timeout:
@@ -449,7 +446,6 @@ if __name__ == '__main__':
         print('Aborted')
         sys.exit(1)
 
-    _URL_HTTPS_CONTEXT = ssl.create_default_context(cafile=certifi.where())
     check_python_version()
     main()
     print('\nThanks for trying QuestDB!\n')
