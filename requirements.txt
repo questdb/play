@@ -1,0 +1,9 @@
+pyarrow
+numpy
+pandas
+questdb
+matplotlib
+jupyterlab
+requests
+psycopg[binary]
+seaborn
