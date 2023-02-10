@@ -21,6 +21,7 @@ import webbrowser
 import textwrap
 from concurrent.futures import ThreadPoolExecutor
 
+
 _PIP_DEPS = [
     'pillow',
     'pyarrow',
@@ -30,12 +31,13 @@ _PIP_DEPS = [
     'matplotlib',
     'jupyterlab',
     'requests',
-    'psycopg[binary]'
-]
+    'psycopg[binary]']
+
+
 _QUESTDB_VERSION = '6.7'
 _QUESTDB_URL = (
-        f'https://github.com/questdb/questdb/releases/download/{_QUESTDB_VERSION}' +
-        f'/questdb-{_QUESTDB_VERSION}-no-jre-bin.tar.gz')
+    f'https://github.com/questdb/questdb/releases/download/{_QUESTDB_VERSION}' +
+    f'/questdb-{_QUESTDB_VERSION}-no-jre-bin.tar.gz')
 
 
 def wait_prompt():
@@ -67,13 +69,13 @@ def avail_port():
         s.close()
 
 
-def ping_retry(
-        predicate_task,
-        timeout_sec=30,
-        every=0.05,
-        msg='Timed out retrying',
-        backoff_till=5.0,
-        lead_sleep=0.1):
+def retry(
+    predicate_task,
+    timeout_sec=30,
+    every=0.05,
+    msg='Timed out retrying',
+    backoff_till=5.0,
+    lead_sleep=0.1):
     """
     Repeat task every `interval` until it returns a truthy value or times out.
     """
@@ -138,16 +140,14 @@ def tail_log(path, lines=30):
 
 
 class QuestDB:
-    def __init__(self, tmpdir, java_path=None, jar_path=None):
+    def __init__(self, tmpdir):
         self.tmpdir = tmpdir
-        if not java_path:
-            if IS_WINDOWS:
-                java_path = tmpdir / 'jre' / 'bin' / 'java.exe'
-            else:
-                java_path = tmpdir / 'jre' / 'bin' / 'java'
-        self.java = java_path
+        if IS_WINDOWS:
+            self.java = tmpdir / 'jre' / 'bin' / 'java.exe'
+        else:
+            self.java = tmpdir / 'jre' / 'bin' / 'java'
         self.questdb_path = tmpdir / 'questdb'
-        self.jar_path = jar_path or self.questdb_path / 'bin' / 'questdb.jar'
+        self.jar_path = self.questdb_path / 'bin' / 'questdb.jar'
         self.data_path = self.questdb_path / 'data'
         self.log_path = self.data_path / 'log' / 'questdb.log'
         self.proc = None
@@ -164,10 +164,11 @@ class QuestDB:
         questdb_bin_path = self.questdb_path / 'bin'
         # Rename "questdb-6.7-no-jre-bin" or similar to "bin"
         next(self.questdb_path.glob("**/questdb.jar")).parent.rename(questdb_bin_path)
+        (self.questdb_path / 'data' / 'log').mkdir(parents=True)
         self.configure()
 
     def configure(self):
-        (self.questdb_path / 'data' / 'log').mkdir(parents=True)
+        self.host = '127.0.0.1' if IS_WINDOWS else '0.0.0.0'
         if IN_DOCKER:
             self.ilp_port = 9009
             self.pg_port = 8812
@@ -234,7 +235,7 @@ class QuestDB:
         atexit.register(self.stop)
 
         print('Waiting until QuestDB HTTP service is up.')
-        ping_retry(
+        retry(
             self.check_http_up,
             timeout_sec=60,
             msg='Timed out waiting for HTTP service to come up.')
@@ -269,29 +270,26 @@ class QuestDB:
 
 
 class JupyterLab:
-    def __init__(self, tmpdir, script_dir=None):
+    def __init__(self, tmpdir):
         self.tmpdir = tmpdir
-        if script_dir is None:
-            self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
-                if sys.platform == 'win32' else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
-        else:
-            self.script = script_dir
+        self.notebook_dir = None
+        self.script = None
         self.log_path = self.tmpdir / 'jupyterlab.log'
-        self.notebook_dir = self.tmpdir / 'notebooks'
-        self.play_notebook_path = self.notebook_dir / 'play.ipynb'
         self.log_file = None
         self.proc = None
+        self.play_notebook_path = None
         self.port = None
-        self.url = None
 
     def install(self):
         # TODO: Wire-up dynamic ports from QuestDB into `play.ipynb`.
+        self.script = self.tmpdir / 'venv' / 'Scripts' / 'jupyter-lab' \
+            if IS_WINDOWS else self.tmpdir / 'venv' / 'bin' / 'jupyter-lab'
         if os.environ.get('LOCAL_RUN') == '1':
             self.notebook_dir = pathlib.Path(__file__).parent / 'notebooks'
+            self.play_notebook_path = self.notebook_dir / 'play.ipynb'
         else:
             self.notebook_dir = self.tmpdir / 'notebooks'
-            if not self.notebook_dir.exists():
-                self.notebook_dir.mkdir()
+            self.notebook_dir.mkdir()
             self.play_notebook_path = self.notebook_dir / 'play.ipynb'
             download(
                 'https://dl.questdb.io/play/notebooks/play.ipynb',
@@ -303,6 +301,7 @@ class JupyterLab:
     def configure(self, questdb):
         with self.play_notebook_path.open('r') as play_file:
             play = json.load(play_file)
+
             # Patch up the contents of the second cell.
             play['cells'][2]['source'] = [
                 '# This demo relies on dynamic network ports for the core endpoints.\n',
@@ -313,22 +312,26 @@ class JupyterLab:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
     def run(self):
-        self.port = avail_port()
+        if IN_DOCKER:
+            self.port = 8888
+        else:
+            self.port = avail_port()
         self.log_file = open(self.log_path, 'ab')
-        command = [str(self.script)]
-        command.append('--port')
-        command.append(str(self.port))
-        command.append('--no-browser')
-        command.append('--notebook-dir')
-        command.append(str(self.notebook_dir))
-        command.append(str(self.play_notebook_path))
-        print(f'jupyter-lab command: {" ".join(command)}')
-        self.proc = subprocess.Popen(
-            command,
+        args = [
+                str(self.script),
+                '--port', str(self.port),
+                '--no-browser']
+        if not IS_WINDOWS:
+            args.append('--ip=0.0.0.0')
+        args.append('play.ipynb')
+        if IN_DOCKER:
+            args.append('--allow-root')
+        self.proc = subprocess.Popen(args,
             close_fds=True,
             cwd=self.notebook_dir,
             stdout=self.log_file,
             stderr=subprocess.STDOUT)
+
         atexit.register(self.stop)
         self.discover_url()
 
@@ -336,18 +339,20 @@ class JupyterLab:
         if self.proc.poll() is not None:
             log = tail_log(self.log_path)
             raise RuntimeError(f'JupyterLab died during startup. {log}')
-        target_log = f'http://localhost:{self.port}/lab?token='
         with open(self.log_path, 'r') as log_file:
             for line in log_file:
-                if target_log in line:
+                if ('    http://' in line) and (f':{self.port}/lab?token=' in line):
                     self.url = line.strip()
+                    self.hostname = self.url.split('://')[1].split(':')[0]
+                    self.token = self.url.split('token=')[1]
+                    self.url = f'http://{self.hostname}:{self.port}/lab/tree/play.ipynb?token={self.token}'
                     print(f'JupyterLab URL: {self.url}')
                     return True
         return False
 
     def discover_url(self):
         print('Waiting until JupyterLab URL is available.')
-        ping_retry(
+        retry(
             self.scan_log_for_url,
             timeout_sec=30,
             msg='Timed out waiting for JupyterLab URL to become available.')
@@ -374,12 +379,11 @@ def with_tmpdir(fn):
         finally:
             shutil.rmtree(str(tmpdir))
             print(f'Deleted temporary directory: {tmpdir}')
-
     return wrapper
 
 
-def write_readme():
-    with open('PLAY_QUESTDB_README.txt', 'w') as readme:
+def write_readme(tmpdir):
+    with open(tmpdir / 'README.txt', 'w') as readme:
         readme.write(
             '''Directory and contents created by https://play.questdb.io/
             If you don't recognize this directory, you can safely delete it.''')
@@ -387,25 +391,41 @@ def write_readme():
 
 def setup_venv(tmpdir):
     venv_dir = tmpdir / 'venv'
-    subprocess.run([sys.executable, '-m', 'venv', str(venv_dir)], check=True)
-    python3_path = str(next(venv_dir.glob("**/python3")))
-    subprocess.run([python3_path, '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
     subprocess.run(
-        [
-            str(next(venv_dir.glob("**/pip3"))),
-            'install',
-            '--no-warn-script-location',
-            '--no-input',
-            '--no-compile',
-            '--only-binary',
-            ':all:'
-        ] + _PIP_DEPS,
+        [sys.executable, '-m', 'venv', str(venv_dir)],
+        check=True)
+    pip_path = venv_dir / 'Scripts' / 'pip' \
+        if IS_WINDOWS else venv_dir / 'bin' / 'pip'
+
+    # First, upgrade `pip` and `setuptools` in the venv. These may be too old.
+    subprocess.run(
+        [str(pip_path), 'install', '--upgrade', 'pip', 'setuptools'],
+        cwd=str(venv_dir),
+        check=True)
+
+    # Now, install dependencies.
+    opts = [
+        '--upgrade',
+        '--no-cache-dir',
+        '--no-warn-script-location',
+        '--disable-pip-version-check',
+        '--ignore-installed',
+        '--no-input',
+        '--no-compile',
+        '--only-binary', ':all:']
+    subprocess.run(
+        [str(pip_path), 'install'] + opts + _PIP_DEPS,
         cwd=str(venv_dir),
         check=True)
 
 
 def check_python_version():
-    if sys.version_info < (3, 8):
+    if (sys.platform == 'darwin') and \
+            (platform.machine() == 'arm64') and (sys.version_info < (3, 9)):
+        print('Python 3.9 or later is required on Apple Silicon.')
+        print('Go get it from Homebrew or Python.org.')
+        sys.exit(1)
+    elif sys.version_info < (3, 8):
         print('Python 3.8 or later is required.')
         sys.exit(1)
 
@@ -420,6 +440,14 @@ In a temporary directory, this script will:
 The directory will be automatically deleted when you exit this script.
 
 Continue? [Y/n] '''
+
+
+def start_jupyter_lab(tmpdir, questdb):
+    lab = JupyterLab(tmpdir)
+    lab.install()
+    lab.configure(questdb)
+    lab.run()
+    return lab
 
 
 def try_open_browser(url):
@@ -442,18 +470,23 @@ def main(tmpdir):
     setup_venv(tmpdir)
     install_java_fut.result()
     install_questdb_fut.result()
-    lab = JupyterLab(tmpdir)
-    lab.install()
-    lab.configure(questdb)
-    lab.run()
-    questdb.run()
+    lab_fut = tpe.submit(start_jupyter_lab, tmpdir, questdb)
+    questdb_run_fut = tpe.submit(questdb.run)
+    lab = lab_fut.result()
+    questdb_run_fut.result()
+    hostname = lab.hostname
     print('\n\nQuestDB and JupyterLab are now running...')
     print(f' * Temporary directory: {tmpdir}')
     print(f' * JupyterLab: {lab.url}')
-    print(f' * QuestDB:')
-    print(f'    * Web Console / REST API: http://localhost:{questdb.http_port}/')
-    print(f'    * PSQL: psql -h localhost -p {questdb.pg_port} -U admin -d qdb')
+    print(' * QuestDB:')
+    print(f'    * Web Console / REST API: http://{hostname}:{questdb.http_port}/')
+    print(f'    * PSQL: psql -h {hostname} -p {questdb.pg_port} -U admin -d qdb  # password: quest')
     print(f'    * ILP Protocol, port: {questdb.ilp_port}')
+    if IN_DOCKER:
+        print('')
+        print('It also looks like you are running this script in a Docker container.')
+        print('You may need to forward ports to your host machine:')
+        print('   -p 8888:8888 -p 9000:9000 -p 8812:8812 -p 9009:9009')
     print('\n')
     try_open_browser(lab.url)
     wait_prompt()
@@ -462,11 +495,10 @@ def main(tmpdir):
 
 
 if __name__ == '__main__':
+    check_python_version()
     if input(_ASK_PROMPT).lower().strip() not in ('y', ''):
         print('Aborted')
         sys.exit(1)
-
-    check_python_version()
     main()
     print('\nThanks for trying QuestDB!\n')
     print('Learn more:')
