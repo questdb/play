@@ -83,36 +83,21 @@
             left: -1000px;
         }
 
-        #logo {
-            visibility: hidden;
-            text-align: center;
-            color: white;
-        }
-
-        #copied {
-            visibility: hidden;
-            color: #b1b5d3;
-            text-align: center;
-        }
-
         .signature {
             font-style: italic;
             text-align: right;
         }
 
-        @-webkit-keyframes glow {
-            from {
-                text-shadow:
-                    0 0 10px #21222c,
-                    0 0 20px #21222c,
-                    0 0 30px #21222c;
+        .pulse {
+            animation: pulse 2s 5;
+        }
+
+        @keyframes pulse{
+            0%{
+              box-shadow:#b1b5d3 0 0 0 0;
             }
-            
-            to {
-                text-shadow:
-                    0 0 10px #80458d,
-                    0 0 20px #753d82,
-                    0 0 30px #53345a;
+            75%{
+              box-shadow:#ff69b400 0 0 0 16px;
             }
         }
     </style>
@@ -121,15 +106,19 @@
             let runMe = document.getElementById(runMeId);
             let copyBuf = document.getElementById("copy-buf");
             let cmd = runMe.innerText;
-            copyBuf.textContent = cmd;
-            copyBuf.select();
-            document.execCommand("copy");
-            alert('Copied to clipboard.\nPaste into your terminal.');
+            navigator.clipboard.writeText(cmd).then(function() {
+                for (let id of ['run-me-py', 'run-me-docker']) {
+                    let el = document.getElementById(id);
+                    el.classList.remove('pulse');
+                }
+                runMe.classList.add('pulse');
+            }, function(err) {
+                console.error("Failed to copy to clipboard: ", err);
+            });
         }
     </script>
 </head>
 <body>
-    <textarea id="copy-buf"></textarea>
     <p>
         There once was an engineer who dreamt of an open-source time series
         database that could ingest data at a rate of millions of rows per
