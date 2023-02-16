@@ -103,18 +103,20 @@
     </style>
     <script>
         function copyToClipboard(runMeId) {
-            let runMe = document.getElementById(runMeId);
-            let copyBuf = document.getElementById("copy-buf");
-            let cmd = runMe.innerText;
-            navigator.clipboard.writeText(cmd).then(function() {
-                for (let id of ['run-me-py', 'run-me-docker']) {
-                    let el = document.getElementById(id);
-                    el.classList.remove('pulse');
-                }
-                runMe.classList.add('pulse');
-            }, function(err) {
-                console.error("Failed to copy to clipboard: ", err);
-            });
+            const runMe = document.getElementById(runMeId);
+            const copyBuf = document.getElementById("copy-buf");
+            const cmd = runMe.innerText;
+            const copyEl = document.createElement("textarea");
+            copyEl.value = cmd;
+            document.body.appendChild(copyEl);
+            copyEl.select();
+            document.execCommand("copy");
+            document.body.removeChild(copyEl);
+            for (let id of ['run-me-py', 'run-me-docker']) {
+                let el = document.getElementById(id);
+                el.classList.remove('pulse');
+            }
+            runMe.classList.add('pulse');
         }
     </script>
 </head>
