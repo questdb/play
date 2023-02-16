@@ -90,7 +90,7 @@
         }
 
         .pulse {
-            animation: pulse 2s 5;
+            animation: pulse 1s 1;
         }
 
         @keyframes pulse{
@@ -113,11 +113,10 @@
             copyEl.select();
             document.execCommand("copy");
             document.body.removeChild(copyEl);
-            for (let id of ['run-me-py', 'run-me-docker']) {
-                let el = document.getElementById(id);
-                el.classList.remove('pulse');
-            }
             runMe.classList.add('pulse');
+            setTimeout(() => {
+                runMe.classList.remove('pulse');
+            }, 1000);
         }
     </script>
 </head>
