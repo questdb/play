@@ -18,6 +18,12 @@ To run the script and edit/use the notebook from the repo's directory (to make c
 LOCAL_RUN=1 python3 run.py
 ```
 
+Once done editing the notebook, re-build index.html:
+
+```shell
+./build.py
+```
+
 ## Docker
 
 ### Build image

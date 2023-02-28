@@ -5,9 +5,6 @@ __pycache__/
 
 .idea/
 
-# The output directory
-output/
-
 # C extensions
 *.so
 
