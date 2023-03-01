@@ -268,30 +268,6 @@ class QuestDB:
         self.log_file = None
 
 
-HEADER_HTML = """
-<section style="background-color: #21222c; padding: 1em">
-    <h1><img
-            alt="QuestDB Logo"
-            src="https://play.questdb.io/questdb-logo.svg" width="305px"/></h1>
-    <h2 style="color: white;">Interactive Notebook Session - Let's Play</h2>
-    <p style="display: flex">
-        <a style="display: block; padding: 0.5em; margin: 0.1em;
-            background-color: #eee;"
-            href="http://{hostname}:{http_port}/"
-            target="_blank">Web Console</a>
-        <a style="display: block; padding: 0.5em; margin: 0.1em;
-            background-color: #eee;"
-            href="https://questdb.io/docs/develop/connect/"
-            target="_blank">QuestDB Docs</a>
-        <a style="display: block; padding: 0.5em; margin: 0.1em;
-            background-color: #eee;"
-            href="https://py-questdb-client.readthedocs.io/en/latest/"
-            target="_blank">Python Client Library Docs</a>
-    </p>
-</section>
-"""
-
-
 class JupyterLab:
     def __init__(self, tmpdir=None, script_path=None, notebook_dir=None, log_path=None):
         self.tmpdir = tmpdir
@@ -326,20 +302,16 @@ class JupyterLab:
         with self.play_notebook_path.open('r') as play_file:
             play = json.load(play_file)
 
-            # Patch the cell with the Web Console link.
-            html = HEADER_HTML.format(
-                hostname=questdb.hostname,
-                http_port=questdb.http_port)
-            play['cells'][0]['source'] = [
-                line + '\n'
-                for line in html.split('\n')[1:-1]]
-
             # Patch up the contents of the ports cell.
-            play['cells'][3]['source'] = [
-                '# This demo relies on dynamic network ports for the core endpoints.\n',
+            ports_cell = [
                 f'http_port = {questdb.http_port}  # Web Console and REST API\n',
                 f'ilp_port = {questdb.ilp_port}  # Fast data ingestion port \n',
                 f'pg_port = {questdb.pg_port}  # PostgreSQL-compatible endpoint']
+            if questdb.http_port != 9000:
+                msg = ('# This notebook uses dynamic TCP ' +
+                       'ports for the service endpoints.\n')
+                ports_cell.insert(0, msg)
+            play['cells'][3]['source'] = ports_cell
         with self.play_notebook_path.open('w') as play_file:
             json.dump(play, play_file, indent=1, sort_keys=True)
 
