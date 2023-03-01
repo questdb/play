@@ -29,7 +29,7 @@ Once done editing the notebook, re-build index.html:
 ### Build image
 
 ```shell
-docker build -t questdb/play:1.0.0-SNAPSHOT .
+docker buildx build --platform linux/arm64/v8,linux/amd64 -t questdb/play:1.0.0 .
 ```
 
 ### Run Container
@@ -41,7 +41,7 @@ docker build -t questdb/play:1.0.0-SNAPSHOT .
     -p 9009:9009 \
     -p 9000:9000 \
     --name play \
-    -it questdb/play:1.0.0-SNAPSHOT
+    -it questdb/play:1.0.0
 ```
 
 To enter a terminal from within the image, append `bash` to the command above.
@@ -49,7 +49,7 @@ To enter a terminal from within the image, append `bash` to the command above.
 ### Upload Image to Docker Hub
 
 ```shell
-docker push questdb/play:1.0.0-SNAPSHOT
+docker push questdb/play:1.0.0
 ```
 
 ### Mount points

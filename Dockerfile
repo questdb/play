@@ -29,7 +29,6 @@ EXPOSE 9000/tcp
 EXPOSE 9009/tcp
 
 ENV QUESTDB_TAG=6.7
-ENV ARCHITECTURE=x64
 ENV PYTHONUNBUFFERED 1
 ENV JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
 ENV PATH="$JAVA_HOME/bin:${PATH}"
@@ -39,11 +38,9 @@ RUN apt-get -y update
 RUN apt-get -y upgrade
 RUN apt-get -y --no-install-recommends install syslog-ng ca-certificates git curl wget vim procps gnupg2 lsb-release software-properties-common unzip less tar gzip iputils-ping
 
-# Install JDK
-RUN wget -O- https://apt.corretto.aws/corretto.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/winehq.gpg >/dev/null && \
-    add-apt-repository 'deb https://apt.corretto.aws stable main' && \
-    apt-get update && \
-    apt-get install -y java-17-amazon-corretto-jdk=1:17.0.3.6-1
+RUN wget -O- https://apt.corretto.aws/corretto.key | apt-key add - 
+RUN add-apt-repository 'deb https://apt.corretto.aws stable main'
+RUN apt-get update && apt-get install -y java-17-amazon-corretto-jdk
 
 # Clean after packages installation
 RUN apt-get clean
